@@ -35,7 +35,9 @@ def raw_plot(values, concentrations):
         for j in range(0, m_j):
             plt.plot(concentrations, values[i, :, j], '.')
 
-    plt.show()
+
+def summary_plot(means, mean_err, concentrations):
+    plt.errorbar(concentrations, means, yerr=mean_err, xerr=concentrations*0.05)
 
 
 def pretty_gradual_plot(data, concentrations, strain_name_map, drug_name, blank_line=200):

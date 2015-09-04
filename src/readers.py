@@ -6,10 +6,11 @@ from os import path
 from pprint import pprint
 import numpy as np
 from chiffatools.Linalg_routines import rm_nans
-from supporting_functions import index, broadcast, lgi, p_stabilize, extract
-from plot_drawings import quick_hist, show_2d_array, correlation_plot, raw_plot
+from supporting_functions import index, broadcast, lgi, p_stabilize, extract, compute_stats
+from plot_drawings import quick_hist, show_2d_array, correlation_plot, raw_plot, summary_plot
 from collections import defaultdict
 import Quality_Controls as QC
+from matplotlib import pyplot as plt
 
 class historical_reader(object):
 
@@ -104,6 +105,7 @@ class historical_reader(object):
         self.noise_level = noise_level          # equivalent of the variance for a centered normal distribution (66% encompassing bound )
         self.background_noise = background_noise
         self.drug_versions = dict(drug_versions)      # contains the associated drug-concentration pairs for every unique drug
+        self.cl_drug_replicates = cl_drug_replicates
 
 
     def return_relevant_values(self):
@@ -116,6 +118,11 @@ class historical_reader(object):
 if __name__ == "__main__":
     hr = historical_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
     pprint(hr.return_relevant_values().keys())
-    extr_vals, extr_concs = extract(hr.storage, 'HCC1419', 'PD98059', hr.drug_versions, hr.cell_idx, hr.drug_idx)
+    # show_2d_array(hr.cl_drug_replicates)
+    # print hr.cell_idx_rv[52], hr.drug_idx_rv[38]
+    extr_vals, extr_concs = extract(hr.storage, 'HCC2185', '17-AAG', hr.drug_versions, hr.cell_idx, hr.drug_idx)
     # use reverse lookup to find an element with a lot of replications
+    means, errs, unique_concs = compute_stats(extr_vals, extr_concs)
     raw_plot(extr_vals, extr_concs)
+    summary_plot(means, errs, unique_concs)
+    plt.show()

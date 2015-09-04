@@ -76,21 +76,24 @@ def extract(data_container, cell, drug, drug_versions, cell_index, drug_index):
 
     return drug_vals, drug_c
 
-def compute_stats():
-    # todo: collapse the zeros into one for statistical reasons (just pull together the first N )
-    # we might also cut the elements at the depth of their reproducibility (3 is conserverd) to beef up replicates near 0
-    # and allow the removal of Nans along the first dimension
-    #   => a separate function should do it
+def correct_values(raw_values, background, initial):
+    # TODO: compute the values that cancel out the noise (subtraction of background)'
+    # TODO: compute the growth/death compared to the initial OD
+    # TODO: compute the growh/death in terms of signal-to-noise ratio
+
+    # TODO: check if the interplate repeats variance is stronger than intraplate repeate variance
+
     pass
 
+def compute_stats(values, concentrations):
+    unique_values = np.unique(concentrations)
 
-    # TODO:
-    # first, pull all the relevant concentrations and repeats and combine them into a single lane,
-    # showing on-plate replicates and inter-plate replicates
+    means = np.zeros_like(unique_values)
+    errs = np.zeros_like(unique_values)
+    for i, val in enumerate(unique_values):
+        mask = concentrations == val
+        vals = rm_nans(values[:, mask, :])
+        means[i] = np.mean(vals)
+        errs[i] = np.std(vals)/np.sqrt(vals.shape[0])
 
-    # compute mean
-    # compute mean estimation error
-
-    # compute growth/decrease from T0 in terms of dynamic range (with respect to noise level)
-    # compute growth/decrease as relative to drugless growth
-
+    return means, errs, unique_values
