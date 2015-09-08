@@ -27,17 +27,19 @@ def correlation_plot(x, y):
     print "r-squared:", r_value**2
 
 
-def raw_plot(values, concentrations):
+def raw_plot(values, concentrations, noise_level):
     m_i = values.shape[0]
     m_j = values.shape[2]
+    errs = np.empty_like(concentrations)
+    errs.fill(noise_level)
 
     for i in range(0, m_i):
         for j in range(0, m_j):
-            plt.plot(concentrations, values[i, :, j], '.')
+            plt.errorbar(concentrations, values[i, :, j], yerr=errs, fmt='.')
 
 
 def summary_plot(means, mean_err, concentrations):
-    plt.errorbar(concentrations, means, yerr=mean_err, xerr=concentrations*0.05)
+    plt.errorbar(concentrations, means, yerr=mean_err)
 
 
 def pretty_gradual_plot(data, concentrations, strain_name_map, drug_name, blank_line=200):

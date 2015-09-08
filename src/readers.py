@@ -6,7 +6,7 @@ from os import path
 from pprint import pprint
 import numpy as np
 from chiffatools.Linalg_routines import rm_nans
-from supporting_functions import index, broadcast, lgi, p_stabilize, extract, compute_stats
+from supporting_functions import index, broadcast, lgi, p_stabilize, extract, compute_stats, correct_values
 from plot_drawings import quick_hist, show_2d_array, correlation_plot, raw_plot, summary_plot
 from collections import defaultdict
 import Quality_Controls as QC
@@ -87,11 +87,11 @@ class historical_reader(object):
         alpha_bound = np.percentile(rm_nans(background_noise), 100 - alpha_bound_percentile)
         noise_level = np.percentile(rm_nans(background_noise), 66)
 
+        background = p_stabilize(background, 0.5)
         T0_background = p_stabilize(T0_background, 0.5)
         TF_background = p_stabilize(TF_background, 0.5)
 
         storage_dblanc = storage - TF_background[:,:,:, np.newaxis, np.newaxis]
-        T0_median_dblanc = T0_median - T0_background
 
         self.header = header                    # header line
         self.cell_idx = cell_idx                # celline to index
@@ -100,7 +100,9 @@ class historical_reader(object):
         self.drug_idx_rv = drug_idx_rv          # index to drug
         self.storage = storage_dblanc           # for each cell_line, drug, concentration, contains the three replicates
         self.background = background            # for each cell_line and drug contains T0_1, T0_2 and T_final, T_final backgrounds
-        self.T0_median = T0_median_dblanc       # for each cell_line and drug contains T0
+        self.T0_background = T0_background
+        self.TF_background = TF_background
+        self.T0_median = T0_median              # for each cell_line and drug contains T0
         self.alpha_bound = alpha_bound          # value below which difference is not considered as significant.
         self.noise_level = noise_level          # equivalent of the variance for a centered normal distribution (66% encompassing bound )
         self.background_noise = background_noise
@@ -120,9 +122,29 @@ if __name__ == "__main__":
     pprint(hr.return_relevant_values().keys())
     # show_2d_array(hr.cl_drug_replicates)
     # print hr.cell_idx_rv[52], hr.drug_idx_rv[38]
-    extr_vals, extr_concs = extract(hr.storage, 'HCC2185', '17-AAG', hr.drug_versions, hr.cell_idx, hr.drug_idx)
+
+    extr_vals, extr_concs, T0_bck, TF_bck, T0_median = extract(hr.storage, 'HCC2185', '17-AAG', hr.drug_versions,
+                                                                hr.cell_idx, hr.drug_idx, hr.T0_background,
+                                                                hr.TF_background, hr.T0_median)
     # use reverse lookup to find an element with a lot of replications
-    means, errs, unique_concs = compute_stats(extr_vals, extr_concs)
-    raw_plot(extr_vals, extr_concs)
+
+    fold_growth, sigmas = correct_values(extr_vals, T0_bck, TF_bck, T0_median, hr.noise_level)
+
+    means, errs, unique_concs = compute_stats(extr_vals, extr_concs, hr.noise_level)
+
+    # raw_plot(extr_vals, extr_concs, hr.noise_level)
+    # means, errs, unique_concs = compute_stats(extr_vals, extr_concs, hr.noise_level)
+    # summary_plot(means, errs, unique_concs)
+    # plt.show()
+
+    raw_plot(fold_growth, extr_concs, hr.noise_level)
+    means, errs, unique_concs = compute_stats(fold_growth, extr_concs, hr.noise_level)
     summary_plot(means, errs, unique_concs)
     plt.show()
+
+    raw_plot(sigmas, extr_concs, 1)
+    means, errs, unique_concs = compute_stats(sigmas, extr_concs, 1)
+    summary_plot(means, errs, unique_concs)
+    plt.show()
+
+    # TODO: use background noise to compute the probability of deviation from the core (mainly std)

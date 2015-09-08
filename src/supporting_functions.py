@@ -53,10 +53,16 @@ def p_stabilize(array, percentile):
     return array
 
 
-def extract(data_container, cell, drug, drug_versions, cell_index, drug_index):
+def extract(data_container, cell, drug, drug_versions, cell_index, drug_index, T0_bck, TF_bck, T0_container):
 
     def nan(_drug_n):
         return np.all(np.isnan(data_container[cell_n, _drug_n]))
+
+    def helper_round(T_container):
+        T_container_vals = [np.repeat(T_container[cell_n, drug_n][:, np.newaxis], 10, axis=1) for drug_n in drugs_nos]
+        T_container_vals = np.hstack(T_container_vals)
+        T_container_vals = T_container_vals[:, c_argsort]
+        return T_container_vals
 
     cell_n = cell_index[cell]
     retained_drugs = [drug_v for drug_v in drug_versions[drug] if not nan(drug_index[drug_v])]
@@ -64,6 +70,7 @@ def extract(data_container, cell, drug, drug_versions, cell_index, drug_index):
     drugs_nos = [drug_index[drug_v] for drug_v in retained_drugs]
 
     drug_vals = [data_container[cell_n, drug_n] for drug_n in drugs_nos ]
+
     drug_c = [drug_v[1]*drug_c_array for drug_v in retained_drugs]
 
     drug_vals = np.hstack(drug_vals)
@@ -74,18 +81,22 @@ def extract(data_container, cell, drug, drug_versions, cell_index, drug_index):
     drug_c = drug_c[c_argsort]
     drug_vals = drug_vals[:, c_argsort, :] # standard error of mean is the standard deviation divided by the sqrt of number of non-nul elements
 
-    return drug_vals, drug_c
+    T0_bck_vals = helper_round(T0_bck)
+    TF_bck_vals = helper_round(TF_bck)
+    T0_vals = helper_round(T0_container)
 
-def correct_values(raw_values, background, initial):
-    # TODO: compute the values that cancel out the noise (subtraction of background)'
-    # TODO: compute the growth/death compared to the initial OD
-    # TODO: compute the growh/death in terms of signal-to-noise ratio
+    return drug_vals, drug_c, T0_bck_vals, TF_bck_vals, T0_vals
 
-    # TODO: check if the interplate repeats variance is stronger than intraplate repeate variance
 
-    pass
+def correct_values(raw_values, T0_bck, TF_bck, initial, std):
+    TF_supressed = raw_values - TF_bck[:, :, np.newaxis]
+    T0_supressed = initial - T0_bck
+    fold_growth = TF_supressed - T0_supressed[:, :, np.newaxis]
+    sigmas = fold_growth/std
 
-def compute_stats(values, concentrations):
+    return fold_growth, sigmas
+
+def compute_stats(values, concentrations, background_std):
     unique_values = np.unique(concentrations)
 
     means = np.zeros_like(unique_values)
@@ -94,6 +105,6 @@ def compute_stats(values, concentrations):
         mask = concentrations == val
         vals = rm_nans(values[:, mask, :])
         means[i] = np.mean(vals)
-        errs[i] = np.std(vals)/np.sqrt(vals.shape[0])
+        errs[i] = np.sqrt(np.std(vals)**2 + background_std**2)/np.sqrt(vals.shape[0])
 
     return means, errs, unique_values

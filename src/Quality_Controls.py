@@ -3,6 +3,8 @@ __author__ = 'Andrei'
 import numpy as np
 from supporting_functions import p_stabilize
 from plot_drawings import show_2d_array, quick_hist, correlation_plot
+from chiffatools.dataviz import smooth_histogram
+from scipy.stats import norm
 
 # TODO: cell_drug_replicates analysis
 # TODO: plate_specific noise level : correlation between T0 and TF difference between blank wells
@@ -35,3 +37,15 @@ def check_blanks(background, background_noise):
     quick_hist(np.nanmean(p_stabilize(background_noise, 0.5), 1))
 
 
+def check_background(background):
+    """
+    checks that background actually follows poisson distribution
+
+    :param background:
+    :return:
+    """
+    background = p_stabilize(background, 0.5)
+    mean = np.nanmean(background)
+    std = np.nanstd(background)
+    smooth_histogram(background)
+    smooth_histogram(norm.rvs(mean, std, size=1000),'g')
