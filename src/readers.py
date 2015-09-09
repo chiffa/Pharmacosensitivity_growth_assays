@@ -7,6 +7,7 @@ from pprint import pprint
 import numpy as np
 from chiffatools.Linalg_routines import rm_nans
 from supporting_functions import index, broadcast, lgi, p_stabilize, extract, compute_stats, correct_values
+import supporting_functions as SF
 from plot_drawings import quick_hist, show_2d_array, correlation_plot, raw_plot, summary_plot
 from collections import defaultdict
 import Quality_Controls as QC
@@ -14,7 +15,7 @@ from matplotlib import pyplot as plt
 
 class historical_reader(object):
 
-    def __init__(self, pth, fle, alpha_bound_percentile=2):
+    def __init__(self, pth, fle, alpha_bound_percentile=5):
 
         cells = []
         drugs = []
@@ -85,7 +86,7 @@ class historical_reader(object):
         cl_drug_replicates[cl_drug_replicates < 1] = np.nan
 
         alpha_bound = np.percentile(rm_nans(background_noise), 100 - alpha_bound_percentile)
-        noise_level = np.percentile(rm_nans(background_noise), 66)
+        std_of_tools = np.percentile(rm_nans(background_noise), 66)
 
         background = p_stabilize(background, 0.5)
         T0_background = p_stabilize(T0_background, 0.5)
@@ -104,7 +105,7 @@ class historical_reader(object):
         self.TF_background = TF_background
         self.T0_median = T0_median              # for each cell_line and drug contains T0
         self.alpha_bound = alpha_bound          # value below which difference is not considered as significant.
-        self.noise_level = noise_level          # equivalent of the variance for a centered normal distribution (66% encompassing bound )
+        self.std_of_tools = std_of_tools          # equivalent of the variance for a centered normal distribution (66% encompassing bound )
         self.background_noise = background_noise
         self.drug_versions = dict(drug_versions)      # contains the associated drug-concentration pairs for every unique drug
         self.cl_drug_replicates = cl_drug_replicates
@@ -121,30 +122,55 @@ if __name__ == "__main__":
     hr = historical_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
     pprint(hr.return_relevant_values().keys())
     # show_2d_array(hr.cl_drug_replicates)
-    # print hr.cell_idx_rv[52], hr.drug_idx_rv[38]
+    # print hr.cell_idx_rv[37], hr.drug_idx_rv[32]
+    # print hr.std_of_tools
 
-    extr_vals, extr_concs, T0_bck, TF_bck, T0_median = extract(hr.storage, 'HCC2185', '17-AAG', hr.drug_versions,
+    # extr_vals, extr_concs, T0_bck, TF_bck, T0_median = extract(hr.storage, 'HCC2185', '17-AAG', hr.drug_versions,
+    #                                                             hr.cell_idx, hr.drug_idx, hr.T0_background,
+    #                                                             hr.TF_background, hr.T0_median)
+
+    extr_vals, extr_concs, T0_bck, TF_bck, T0_median = extract(hr.storage, 'HCC202', 'Rapamycin', hr.drug_versions,
                                                                 hr.cell_idx, hr.drug_idx, hr.T0_background,
                                                                 hr.TF_background, hr.T0_median)
+
     # use reverse lookup to find an element with a lot of replications
 
-    fold_growth, sigmas = correct_values(extr_vals, T0_bck, TF_bck, T0_median, hr.noise_level)
+    T0, TF, fold_growth, sigmas = correct_values(extr_vals, T0_bck, TF_bck, T0_median, hr.std_of_tools)
 
-    means, errs, unique_concs = compute_stats(extr_vals, extr_concs, hr.noise_level)
+    raw_plot(fold_growth, extr_concs, hr.std_of_tools)
+    means, errs, stds, freedom_degs, unique_concs = compute_stats(fold_growth, extr_concs, hr.std_of_tools)
+    summary_plot(means, errs, unique_concs)
+    plt.show()
 
-    # raw_plot(extr_vals, extr_concs, hr.noise_level)
+    # TF_means, TF_errs, TF_stds, TF_dfs, unique_concs = compute_stats(TF, extr_concs, hr.noise_level)
+    # T0_means, T0_errs, T0_stds, T0_dfs, unique_concs = compute_stats(T0[:, :, np.newaxis], extr_concs, hr.noise_level)
+
+    alphas = SF.logistic_regression(TF, T0, extr_concs, hr.std_of_tools)
+    alpha_5p_alpha_mins = SF.logistic_regression(TF-2*hr.std_of_tools, T0, extr_concs, hr.std_of_tools)
+    alpha_5p_alpha_maxs = SF.logistic_regression(TF+2*hr.std_of_tools, T0, extr_concs, hr.std_of_tools)
+
+    alpha_means, _, alpha_stds, alpha_dfs, unique_concs = compute_stats(alphas, extr_concs, 0)
+    alpha_maxs, _, _, _, _ = compute_stats(alpha_5p_alpha_maxs-alphas, extr_concs, 0)
+    alpha_mins, _, _, _, _ = compute_stats(alphas-alpha_5p_alpha_mins, extr_concs, 0)
+
+    print alpha_stds
+    print alpha_maxs+alpha_mins
+    print alpha_stds / (alpha_maxs+alpha_mins)
+
+    raw_plot(alphas, extr_concs, (alphas-alpha_5p_alpha_mins, alpha_5p_alpha_maxs-alphas))
     # means, errs, unique_concs = compute_stats(extr_vals, extr_concs, hr.noise_level)
+    summary_plot(alpha_means, [np.sqrt(alpha_stds**2+alpha_mins**2)/np.sqrt(alpha_dfs),
+                               np.sqrt(alpha_stds**2+alpha_maxs**2)/np.sqrt(alpha_dfs)], unique_concs)
+    plt.show()
+
+    # TODO: replace the upper bound in case the actual data point is below 0
+
+    # raw_plot(fold_growth, extr_concs, hr.noise_level)
+    # means, errs, stds, freedom_degs, unique_concs = compute_stats(fold_growth, extr_concs, hr.noise_level)
     # summary_plot(means, errs, unique_concs)
     # plt.show()
-
-    raw_plot(fold_growth, extr_concs, hr.noise_level)
-    means, errs, unique_concs = compute_stats(fold_growth, extr_concs, hr.noise_level)
-    summary_plot(means, errs, unique_concs)
-    plt.show()
-
-    raw_plot(sigmas, extr_concs, 1)
-    means, errs, unique_concs = compute_stats(sigmas, extr_concs, 1)
-    summary_plot(means, errs, unique_concs)
-    plt.show()
-
-    # TODO: use background noise to compute the probability of deviation from the core (mainly std)
+    #
+    # raw_plot(sigmas, extr_concs, 1)
+    # means, errs, stds, freedom_degs, unique_concs = compute_stats(sigmas, extr_concs, 1)
+    # summary_plot(means, errs, unique_concs)
+    # plt.show()

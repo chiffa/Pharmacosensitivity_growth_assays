@@ -30,12 +30,23 @@ def correlation_plot(x, y):
 def raw_plot(values, concentrations, noise_level):
     m_i = values.shape[0]
     m_j = values.shape[2]
-    errs = np.empty_like(concentrations)
-    errs.fill(noise_level)
+
+    if type(noise_level) == np.float64:
+        errs = np.empty_like(values)
+        errs.fill(noise_level)
+        errs = [errs, errs]
+
+    if type(noise_level) == np.ndarray:
+        errs = [noise_level, noise_level]
+
+    if type(noise_level) == tuple:
+        errs = [noise_level[0], noise_level[1]]
 
     for i in range(0, m_i):
         for j in range(0, m_j):
-            plt.errorbar(concentrations, values[i, :, j], yerr=errs, fmt='.')
+            temp_concs = concentrations
+            # temp_concs = concentrations*np.random.uniform(0.95, 1.05, 1)
+            plt.errorbar(temp_concs, values[i, :, j], yerr=[errs[0][i, :, j], errs[1][i, :, j]], fmt='.')
 
 
 def summary_plot(means, mean_err, concentrations):

@@ -2,6 +2,7 @@ __author__ = 'Andrei'
 
 import numpy as np
 from chiffatools.Linalg_routines import rm_nans
+from scipy.stats import t
 
 drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
 
@@ -23,9 +24,9 @@ def make_comparator(percentile_5_range):
     st = np.sqrt(2)
 
     def compare(val1, val2):
-        if val1-val2 > st*percentile_5_range:
+        if val1 - val2 > st * percentile_5_range:
             return 1
-        if val1-val2 < -st*percentile_5_range:
+        if val1 - val2 < -st * percentile_5_range:
             return -1
         else:
             return 0
@@ -92,19 +93,48 @@ def correct_values(raw_values, T0_bck, TF_bck, initial, std):
     TF_supressed = raw_values - TF_bck[:, :, np.newaxis]
     T0_supressed = initial - T0_bck
     fold_growth = TF_supressed - T0_supressed[:, :, np.newaxis]
-    sigmas = fold_growth/std
+    sigmas = fold_growth / std
 
-    return fold_growth, sigmas
+    return T0_supressed, TF_supressed, fold_growth, sigmas
+
 
 def compute_stats(values, concentrations, background_std):
     unique_values = np.unique(concentrations)
 
     means = np.zeros_like(unique_values)
     errs = np.zeros_like(unique_values)
+    stds = np.zeros_like(unique_values)
+    freedom_degs = np.zeros_like(unique_values)
     for i, val in enumerate(unique_values):
         mask = concentrations == val
         vals = rm_nans(values[:, mask, :])
         means[i] = np.mean(vals)
-        errs[i] = np.sqrt(np.std(vals)**2 + background_std**2)/np.sqrt(vals.shape[0])
+        stds[i] = np.sqrt(np.std(vals)**2 + background_std**2)
+        freedom_degs[i] = np.max((vals.shape[0] - 1, 1))
+        errs[i] = stds[i]/np.sqrt(freedom_degs[i])
 
-    return means, errs, unique_values
+
+    return means, errs, stds, freedom_degs, unique_values
+
+
+def logistic_regression(TF, T0, concentrations, background_std):
+
+    def get_1p_bounds(mean, std, dof):
+        return t.interval(0.99, dof, mean, std)
+
+    mask = concentrations == 0.0
+    vals_at_0 = rm_nans(TF[:, mask, :])
+    max_capacity = get_1p_bounds(np.mean(vals_at_0),
+                                 np.sqrt(np.var(vals_at_0) + background_std**2),
+                                 vals_at_0.shape[0])[1]*1.05
+
+    compensation_T0 = -np.log2(max_capacity/T0-1)[:, :, np.newaxis]
+    compensation_TF = -np.log2(max_capacity/TF-1)
+
+    alphas = compensation_TF - compensation_T0
+
+    return alphas
+    # everything below is identical for all the levels computed:
+
+
+    # print compensation_T0
