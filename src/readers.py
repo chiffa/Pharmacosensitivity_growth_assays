@@ -146,31 +146,11 @@ if __name__ == "__main__":
     # T0_means, T0_errs, T0_stds, T0_dfs, unique_concs = compute_stats(T0[:, :, np.newaxis], extr_concs, hr.noise_level)
 
     alphas = SF.logistic_regression(TF, T0, extr_concs, hr.std_of_tools)
-    alpha_5p_alpha_mins = SF.logistic_regression(TF-2*hr.std_of_tools, T0, extr_concs, hr.std_of_tools)
-    alpha_5p_alpha_maxs = SF.logistic_regression(TF+2*hr.std_of_tools, T0, extr_concs, hr.std_of_tools)
 
-    alpha_means, _, alpha_stds, alpha_dfs, unique_concs = compute_stats(alphas, extr_concs, 0)
-    alpha_maxs, _, _, _, _ = compute_stats(alpha_5p_alpha_maxs-alphas, extr_concs, 0)
-    alpha_mins, _, _, _, _ = compute_stats(alphas-alpha_5p_alpha_mins, extr_concs, 0)
-
-    print alpha_stds
-    print alpha_maxs+alpha_mins
-    print alpha_stds / (alpha_maxs+alpha_mins)
-
-    raw_plot(alphas, extr_concs, (alphas-alpha_5p_alpha_mins, alpha_5p_alpha_maxs-alphas))
-    # means, errs, unique_concs = compute_stats(extr_vals, extr_concs, hr.noise_level)
-    summary_plot(alpha_means, [np.sqrt(alpha_stds**2+alpha_mins**2)/np.sqrt(alpha_dfs),
-                               np.sqrt(alpha_stds**2+alpha_maxs**2)/np.sqrt(alpha_dfs)], unique_concs)
+    raw_plot(alphas, extr_concs, 0.0)
+    # # means, errs, unique_concs = compute_stats(extr_vals, extr_concs, hr.noise_level)
+    # summary_plot(alpha_means, [np.sqrt(alpha_stds**2+alpha_mins**2)/np.sqrt(alpha_dfs),
+    #                            np.sqrt(alpha_stds**2+alpha_maxs**2)/np.sqrt(alpha_dfs)], unique_concs)
     plt.show()
 
     # TODO: replace the upper bound in case the actual data point is below 0
-
-    # raw_plot(fold_growth, extr_concs, hr.noise_level)
-    # means, errs, stds, freedom_degs, unique_concs = compute_stats(fold_growth, extr_concs, hr.noise_level)
-    # summary_plot(means, errs, unique_concs)
-    # plt.show()
-    #
-    # raw_plot(sigmas, extr_concs, 1)
-    # means, errs, stds, freedom_degs, unique_concs = compute_stats(sigmas, extr_concs, 1)
-    # summary_plot(means, errs, unique_concs)
-    # plt.show()

@@ -2,7 +2,7 @@ __author__ = 'Andrei'
 
 import numpy as np
 from chiffatools.Linalg_routines import rm_nans
-from scipy.stats import t
+from scipy.stats import t, norm
 
 drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
 
@@ -98,6 +98,22 @@ def correct_values(raw_values, T0_bck, TF_bck, initial, std):
     return T0_supressed, TF_supressed, fold_growth, sigmas
 
 
+def get_t_distro_outlier_bound_estimation(array):
+
+    narray = rm_nans(array)
+    percentiles = 100/narray.shape[0]
+    print narray, narray.shape[0]
+
+    base = t.interval((100. - 2.*percentiles)/100., narray.shape[0])
+    desired = t.interval(0.95, narray.shape[0])
+
+    twister = desired[1] / base[1]
+    up = (np.max(narray)-np.mean(narray))*twister
+    low = (np.mean(narray)-np.min(narray))* twister
+
+    return max(up, low)
+
+
 def compute_stats(values, concentrations, background_std):
     unique_values = np.unique(concentrations)
 
@@ -108,19 +124,34 @@ def compute_stats(values, concentrations, background_std):
     for i, val in enumerate(unique_values):
         mask = concentrations == val
         vals = rm_nans(values[:, mask, :])
+        get_t_distro_outlier_bound_estimation(vals)
         means[i] = np.mean(vals)
         stds[i] = np.sqrt(np.std(vals)**2 + background_std**2)
         freedom_degs[i] = np.max((vals.shape[0] - 1, 1))
-        errs[i] = stds[i]/np.sqrt(freedom_degs[i])
-
+        # errs[i] = stds[i]/np.sqrt(freedom_degs[i])
+        errs[i] = get_t_distro_outlier_bound_estimation(vals)
 
     return means, errs, stds, freedom_degs, unique_values
+
+
+def get_boundary_correction(TF, background_std):
+
+    def surviving_fraction(_float):
+        return np.ceil(norm.sf(0, _float, background_std)*background_std*1.96)
+
+    surviving_fraction = np.vectorize(surviving_fraction)
+    violating_TF_mask = TF < background_std*1.96
+    TF[violating_TF_mask] = surviving_fraction(TF[violating_TF_mask])
+
+    return TF
 
 
 def logistic_regression(TF, T0, concentrations, background_std):
 
     def get_1p_bounds(mean, std, dof):
         return t.interval(0.99, dof, mean, std)
+
+    TF = get_boundary_correction(TF, background_std)
 
     mask = concentrations == 0.0
     vals_at_0 = rm_nans(TF[:, mask, :])
@@ -134,7 +165,3 @@ def logistic_regression(TF, T0, concentrations, background_std):
     alphas = compensation_TF - compensation_T0
 
     return alphas
-    # everything below is identical for all the levels computed:
-
-
-    # print compensation_T0

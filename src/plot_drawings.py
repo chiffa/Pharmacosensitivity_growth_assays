@@ -31,7 +31,10 @@ def raw_plot(values, concentrations, noise_level):
     m_i = values.shape[0]
     m_j = values.shape[2]
 
-    if type(noise_level) == np.float64:
+    ax = plt.subplot(111)
+    ax.set_xscale('log')
+
+    if type(noise_level) == np.float64 or type(noise_level) == float:
         errs = np.empty_like(values)
         errs.fill(noise_level)
         errs = [errs, errs]
