@@ -89,8 +89,21 @@ def extract(data_container, cell, drug, drug_versions, cell_index, drug_index, T
     return drug_vals, drug_c, T0_bck_vals, TF_bck_vals, T0_vals
 
 
+def get_boundary_correction(TF, background_std):
+
+    def surviving_fraction(_float):
+        return np.ceil(norm.sf(0, _float, background_std)*background_std*1.96)
+
+    surviving_fraction = np.vectorize(surviving_fraction)
+    violating_TF_mask = TF < background_std*1.96
+    TF[violating_TF_mask] = surviving_fraction(TF[violating_TF_mask])
+
+    return TF
+
+
 def correct_values(raw_values, T0_bck, TF_bck, initial, std):
     TF_supressed = raw_values - TF_bck[:, :, np.newaxis]
+    TF_supressed = get_boundary_correction(TF_supressed, std)
     T0_supressed = initial - T0_bck
     fold_growth = TF_supressed - T0_supressed[:, :, np.newaxis]
     sigmas = fold_growth / std
@@ -101,15 +114,19 @@ def correct_values(raw_values, T0_bck, TF_bck, initial, std):
 def get_t_distro_outlier_bound_estimation(array):
 
     narray = rm_nans(array)
-    percentiles = 100/narray.shape[0]
-    print narray, narray.shape[0]
 
-    base = t.interval((100. - 2.*percentiles)/100., narray.shape[0])
-    desired = t.interval(0.95, narray.shape[0])
+    low, up = t.interval(0.95, narray.shape[0]-1, np.mean(narray), np.std(narray))
+    up, low = (up-np.mean(narray), np.mean(narray)-low)
 
-    twister = desired[1] / base[1]
-    up = (np.max(narray)-np.mean(narray))*twister
-    low = (np.mean(narray)-np.min(narray))* twister
+    # percentiles = 100/narray.shape[0]
+    # print narray, narray.shape[0]
+    #
+    # base = t.interval((100. - 2.*percentiles)/100., narray.shape[0])
+    # desired = t.interval(0.95, narray.shape[0]-1)
+    #
+    # twister = desired[1] / base[1]
+    # up = (np.max(narray)-np.mean(narray))*twister
+    # low = (np.mean(narray)-np.min(narray))* twister
 
     return max(up, low)
 
@@ -129,29 +146,15 @@ def compute_stats(values, concentrations, background_std):
         stds[i] = np.sqrt(np.std(vals)**2 + background_std**2)
         freedom_degs[i] = np.max((vals.shape[0] - 1, 1))
         # errs[i] = stds[i]/np.sqrt(freedom_degs[i])
-        errs[i] = get_t_distro_outlier_bound_estimation(vals)
+        errs[i] = get_t_distro_outlier_bound_estimation(vals)/freedom_degs[i]
 
     return means, errs, stds, freedom_degs, unique_values
-
-
-def get_boundary_correction(TF, background_std):
-
-    def surviving_fraction(_float):
-        return np.ceil(norm.sf(0, _float, background_std)*background_std*1.96)
-
-    surviving_fraction = np.vectorize(surviving_fraction)
-    violating_TF_mask = TF < background_std*1.96
-    TF[violating_TF_mask] = surviving_fraction(TF[violating_TF_mask])
-
-    return TF
 
 
 def logistic_regression(TF, T0, concentrations, background_std):
 
     def get_1p_bounds(mean, std, dof):
         return t.interval(0.99, dof, mean, std)
-
-    TF = get_boundary_correction(TF, background_std)
 
     mask = concentrations == 0.0
     vals_at_0 = rm_nans(TF[:, mask, :])

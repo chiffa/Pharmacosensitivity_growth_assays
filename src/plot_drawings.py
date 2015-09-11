@@ -32,7 +32,11 @@ def raw_plot(values, concentrations, noise_level):
     m_j = values.shape[2]
 
     ax = plt.subplot(111)
+
     ax.set_xscale('log')
+
+    msk = concentrations == 0.0
+    concentrations[msk] = np.min(concentrations[np.logical_not(msk)])/4
 
     if type(noise_level) == np.float64 or type(noise_level) == float:
         errs = np.empty_like(values)
@@ -47,13 +51,20 @@ def raw_plot(values, concentrations, noise_level):
 
     for i in range(0, m_i):
         for j in range(0, m_j):
-            temp_concs = concentrations
-            # temp_concs = concentrations*np.random.uniform(0.95, 1.05, 1)
+            # temp_concs = concentrations
+            temp_concs = concentrations*np.random.uniform(0.95, 1.05, 1)
             plt.errorbar(temp_concs, values[i, :, j], yerr=[errs[0][i, :, j], errs[1][i, :, j]], fmt='.')
 
 
-def summary_plot(means, mean_err, concentrations):
+def summary_plot(means, mean_err, concentrations, anchor=None):
+    if anchor is None:
+        concentrations[0] = concentrations[1]/4
+    else:
+        concentrations[0] = anchor
     plt.errorbar(concentrations, means, yerr=mean_err)
+    ymax = means + mean_err
+    ymin = means - mean_err
+    plt.fill_between(concentrations, ymax, ymin, facecolor='red', alpha=0.5)
 
 
 def pretty_gradual_plot(data, concentrations, strain_name_map, drug_name, blank_line=200):

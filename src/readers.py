@@ -142,15 +142,28 @@ if __name__ == "__main__":
     summary_plot(means, errs, unique_concs)
     plt.show()
 
+    raw_plot(sigmas, extr_concs, 1.)
+    means, errs, stds, freedom_degs, unique_concs = compute_stats(sigmas, extr_concs, 1.)
+    print 'errs', errs
+    msk = errs < 9
+    print unique_concs, unique_concs[msk]
+    means = means[msk]
+    errs = errs[msk]
+    anchor = unique_concs[1]/4
+    unique_concs = unique_concs[msk]
+    print means.shape, errs.shape, unique_concs.shape
+    summary_plot(means, errs, unique_concs, anchor)
+    plt.show()
+
     # TF_means, TF_errs, TF_stds, TF_dfs, unique_concs = compute_stats(TF, extr_concs, hr.noise_level)
     # T0_means, T0_errs, T0_stds, T0_dfs, unique_concs = compute_stats(T0[:, :, np.newaxis], extr_concs, hr.noise_level)
 
-    alphas = SF.logistic_regression(TF, T0, extr_concs, hr.std_of_tools)
-
-    raw_plot(alphas, extr_concs, 0.0)
+    # alphas = SF.logistic_regression(TF, T0, extr_concs, hr.std_of_tools)
+    #
+    # raw_plot(alphas, extr_concs, 0.0)
     # # means, errs, unique_concs = compute_stats(extr_vals, extr_concs, hr.noise_level)
     # summary_plot(alpha_means, [np.sqrt(alpha_stds**2+alpha_mins**2)/np.sqrt(alpha_dfs),
     #                            np.sqrt(alpha_stds**2+alpha_maxs**2)/np.sqrt(alpha_dfs)], unique_concs)
-    plt.show()
+    # plt.show()
 
     # TODO: replace the upper bound in case the actual data point is below 0
