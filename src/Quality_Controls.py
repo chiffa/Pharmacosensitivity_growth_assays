@@ -49,3 +49,17 @@ def check_background(background):
     std = np.nanstd(background)
     smooth_histogram(background)
     smooth_histogram(norm.rvs(mean, std, size=1000),'g')
+
+
+def check_reader_consistency(set_of_interest):
+    common_set = set()
+    for subset in set_of_interest:
+        if not common_set:
+            common_set = set(subset)
+        else:
+            common_set.intersection_update(subset)
+
+    print "common_set: ", sorted(list(common_set))
+
+    for subset in set_of_interest:
+        print "unique subset: ", sorted(list(set(subset).difference(common_set)))

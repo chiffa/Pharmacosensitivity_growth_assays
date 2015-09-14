@@ -54,41 +54,6 @@ def p_stabilize(array, percentile):
     return array
 
 
-def extract(data_container, cell, drug, drug_versions, cell_index, drug_index, T0_bck, TF_bck, T0_container):
-
-    def nan(_drug_n):
-        return np.all(np.isnan(data_container[cell_n, _drug_n]))
-
-    def helper_round(T_container):
-        T_container_vals = [np.repeat(T_container[cell_n, drug_n][:, np.newaxis], 10, axis=1) for drug_n in drugs_nos]
-        T_container_vals = np.hstack(T_container_vals)
-        T_container_vals = T_container_vals[:, c_argsort]
-        return T_container_vals
-
-    cell_n = cell_index[cell]
-    retained_drugs = [drug_v for drug_v in drug_versions[drug] if not nan(drug_index[drug_v])]
-
-    drugs_nos = [drug_index[drug_v] for drug_v in retained_drugs]
-
-    drug_vals = [data_container[cell_n, drug_n] for drug_n in drugs_nos ]
-
-    drug_c = [drug_v[1]*drug_c_array for drug_v in retained_drugs]
-
-    drug_vals = np.hstack(drug_vals)
-    drug_c = np.hstack(drug_c)
-
-    c_argsort = np.argsort(drug_c)
-
-    drug_c = drug_c[c_argsort]
-    drug_vals = drug_vals[:, c_argsort, :] # standard error of mean is the standard deviation divided by the sqrt of number of non-nul elements
-
-    T0_bck_vals = helper_round(T0_bck)
-    TF_bck_vals = helper_round(TF_bck)
-    T0_vals = helper_round(T0_container)
-
-    return drug_vals, drug_c, T0_bck_vals, TF_bck_vals, T0_vals
-
-
 def get_boundary_correction(TF, background_std):
 
     def surviving_fraction(_float):
@@ -111,11 +76,11 @@ def correct_values(raw_values, T0_bck, TF_bck, initial, std):
     return T0_supressed, TF_supressed, fold_growth, sigmas
 
 
-def get_t_distro_outlier_bound_estimation(array):
+def get_t_distro_outlier_bound_estimation(array, background_std):
 
     narray = rm_nans(array)
 
-    low, up = t.interval(0.95, narray.shape[0]-1, np.mean(narray), np.std(narray))
+    low, up = t.interval(0.95, narray.shape[0]-1, np.mean(narray), np.sqrt(np.var(narray)+background_std**2))
     up, low = (up-np.mean(narray), np.mean(narray)-low)
 
     # percentiles = 100/narray.shape[0]
@@ -141,15 +106,16 @@ def compute_stats(values, concentrations, background_std):
     for i, val in enumerate(unique_values):
         mask = concentrations == val
         vals = rm_nans(values[:, mask, :])
-        get_t_distro_outlier_bound_estimation(vals)
         means[i] = np.mean(vals)
         stds[i] = np.sqrt(np.std(vals)**2 + background_std**2)
         freedom_degs[i] = np.max((vals.shape[0] - 1, 1))
         # errs[i] = stds[i]/np.sqrt(freedom_degs[i])
-        errs[i] = get_t_distro_outlier_bound_estimation(vals)/freedom_degs[i]
+        errs[i] = get_t_distro_outlier_bound_estimation(vals, background_std)/freedom_degs[i] # TODO: incorporate std error of the data
 
     return means, errs, stds, freedom_degs, unique_values
 
+def logistics():
+    pass
 
 def logistic_regression(TF, T0, concentrations, background_std):
 

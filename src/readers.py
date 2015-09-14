@@ -6,14 +6,15 @@ from os import path
 from pprint import pprint
 import numpy as np
 from chiffatools.Linalg_routines import rm_nans
-from supporting_functions import index, broadcast, lgi, p_stabilize, extract, compute_stats, correct_values
 import supporting_functions as SF
+import plot_drawings as PD
 from plot_drawings import quick_hist, show_2d_array, correlation_plot, raw_plot, summary_plot
 from collections import defaultdict
 import Quality_Controls as QC
 from matplotlib import pyplot as plt
+from StringIO import StringIO
 
-class historical_reader(object):
+class raw_data_reader(object):
 
     def __init__(self, pth, fle, alpha_bound_percentile=5):
 
@@ -31,9 +32,9 @@ class historical_reader(object):
                 drugs.append(expanded_drug_name)
                 plates.append(row[2])
 
-        cell_idx = index(set(cells))
-        drug_idx = index(set(drugs))
-        plates_idx = index(set(plates))
+        cell_idx = SF.index(set(cells))
+        drug_idx = SF.index(set(drugs))
+        plates_idx = SF.index(set(plates))
         drug_versions = dict([(key, list(set(values))) for key, values in drug_versions.iteritems()])
 
         cell_idx_rv = dict([(value, key) for key, value in cell_idx.iteritems()])
@@ -69,18 +70,18 @@ class historical_reader(object):
         with open(path.join(pth, fle)) as src:
             rdr = reader(src, dialect='excel-tab')
             test_array = rdr.next()
-            broadcast(test_array[6:36])
+            SF.broadcast(test_array[6:36])
             for row in rdr:
                 cell_no = cell_idx[row[0]]
                 drug_no = drug_idx[(row[1], float(row[47]))]
                 plate_no = plates_idx[row[2]]
                 depth_index = min(cl_drug_replicates[cell_no, drug_no], depth_limiter-1)
-                storage[cell_no, drug_no, depth_index, :, :] = broadcast(row[6:36])
-                background[cell_no, drug_no, depth_index, :] = lgi(row, [4, 5, 36, 37])
+                storage[cell_no, drug_no, depth_index, :, :] = SF.broadcast(row[6:36])
+                background[cell_no, drug_no, depth_index, :] = SF.lgi(row, [4, 5, 36, 37])
                 T0_median[cell_no, drug_no, depth_index] = row[38]
-                T0_background[cell_no, drug_no, depth_index] = np.mean(lgi(row, [4, 5]).astype(np.float64)).tolist()
-                TF_background[cell_no, drug_no, depth_index] = np.mean(lgi(row, [36, 37]).astype(np.float64)).tolist()
-                background_noise[plate_no, :] = np.abs(lgi(row, [4, 36]).astype(np.float64) - lgi(row, [5, 37]).astype(np.float64))
+                T0_background[cell_no, drug_no, depth_index] = np.mean(SF.lgi(row, [4, 5]).astype(np.float64)).tolist()
+                TF_background[cell_no, drug_no, depth_index] = np.mean(SF.lgi(row, [36, 37]).astype(np.float64)).tolist()
+                background_noise[plate_no, :] = np.abs(SF.lgi(row, [4, 36]).astype(np.float64) - SF.lgi(row, [5, 37]).astype(np.float64))
                 cl_drug_replicates[cell_no, drug_no] += 1
 
         cl_drug_replicates[cl_drug_replicates < 1] = np.nan
@@ -88,9 +89,9 @@ class historical_reader(object):
         alpha_bound = np.percentile(rm_nans(background_noise), 100 - alpha_bound_percentile)
         std_of_tools = np.percentile(rm_nans(background_noise), 66)
 
-        background = p_stabilize(background, 0.5)
-        T0_background = p_stabilize(T0_background, 0.5)
-        TF_background = p_stabilize(TF_background, 0.5)
+        background = SF.p_stabilize(background, 0.5)
+        T0_background = SF.p_stabilize(T0_background, 0.5)
+        TF_background = SF.p_stabilize(TF_background, 0.5)
 
         storage_dblanc = storage - TF_background[:,:,:, np.newaxis, np.newaxis]
 
@@ -118,52 +119,134 @@ class historical_reader(object):
         return render_dict
 
 
+    def retrieve(self, cell, drug):
+
+        drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
+
+        def nan(_drug_n):
+            return np.all(np.isnan(self.storage[cell_n, _drug_n]))
+
+        def helper_round(T_container):
+            T_container_vals = [np.repeat(T_container[cell_n, drug_n][:, np.newaxis], 10, axis=1) for drug_n in drugs_nos]
+            T_container_vals = np.hstack(T_container_vals)
+            T_container_vals = T_container_vals[:, c_argsort]
+            return T_container_vals
+
+        cell_n = self.cell_idx[cell]
+        retained_drugs = [drug_v for drug_v in self.drug_versions[drug] if not nan(self.drug_idx[drug_v])]
+        print retained_drugs
+
+        drugs_nos = [self.drug_idx[drug_v] for drug_v in retained_drugs]
+
+        drug_vals = [self.storage[cell_n, drug_n] for drug_n in drugs_nos ]
+
+        drug_c = [drug_v[1]*drug_c_array for drug_v in retained_drugs]
+
+        drug_vals = np.hstack(drug_vals)
+        drug_c = np.hstack(drug_c)
+
+        c_argsort = np.argsort(drug_c)
+
+        drug_c = drug_c[c_argsort]
+        drug_vals = drug_vals[:, c_argsort, :] # standard error of mean is the standard deviation divided by the sqrt of number of non-nul elements
+
+        T0_bck_vals = helper_round(self.T0_background)
+        TF_bck_vals = helper_round(self.TF_background)
+        T0_vals = helper_round(self.T0_median)
+
+        return drug_vals, drug_c, T0_bck_vals, TF_bck_vals, T0_vals
+
+
+class GI_50_reader(object):
+
+    def __init__(self, pth, fle):
+
+        cells = []
+        data_matrix = []
+        with open(path.join(pth, fle)) as src:
+            rdr = reader(src, dialect='excel-tab')
+            rdr.next()
+            rdr.next()
+            drugs = rdr.next()[1:]
+            for row in rdr:
+                cells.append(row[0])
+                data_matrix.append(np.genfromtxt(np.array(row[1:])).astype(np.float64))
+
+        print cells
+        print drugs
+
+        cell_idx = SF.index(cells)  # MAJOR ERROR HERE!!!!!!!! SET unsets the ordering!!!!!!!!
+        drug_idx = SF.index(drugs)
+
+        cell_idx_rv = dict([(value, key) for key, value in cell_idx.iteritems()])
+        drug_idx_rv = dict([(value, key) for key, value in drug_idx.iteritems()])
+
+        self.cell_idx = cell_idx                # celline to index
+        self.drug_idx = drug_idx                # drug to index
+        self.cell_idx_rv = cell_idx_rv          # index to cell_line
+        self.drug_idx_rv = drug_idx_rv
+        self.GI_50 = np.array(data_matrix)
+
+
+    def retrieve(self, celline, drug):
+        if self.cell_idx.has_key(celline) and self.drug_idx.has_key(drug):
+            print celline, self.cell_idx[celline]
+            print drug, self.drug_idx[drug]
+            return self.GI_50[self.cell_idx[celline], self.drug_idx[drug]]
+        else:
+            return np.NaN
+
+
+class classification_reader(object):
+
+    def __init__(self, pth, fle):
+        cells = []
+        markers = []
+        with open(path.join(pth, fle)) as src:
+            rdr = reader(src, dialect='excel-tab')
+            rdr.next()
+            rdr.next()
+            header = rdr.next()[1:]
+            for row in rdr:
+                cells.append(row[0])
+                markers.append(row[1:])
+
+        cell_idx = SF.index(cells)
+
+        cell_idx_rv = dict([(value, key) for key, value in cell_idx.iteritems()])
+
+        self.cassificant_index = cell_idx                # celline to index
+        self.header = header                    # drug to index
+        self.classificant_index_rv = cell_idx_rv          # index to cell_line
+        self.markers = markers
+
+
+def test_raw_data_reader():
+    hr = raw_data_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
+    tr = GI_50_reader('C:\\Users\\Andrei\\Desktop', 'sd05-bis.tsv')
+    # cr = classification_reader('C:\\Users\\Andrei\\Desktop', 'sd01-bis.tsv')
+    # dr = classification_reader('C:\\Users\\Andrei\\Desktop', 's5.tsv')
+
+    # TF_OD, concentrations, T0_bck, TF_bck, T0_median = hr.retrieve('HCC202', 'Rapamycin')
+    # GI_50 = 10**(-tr.retrieve('HCC202', 'Rapamycin'))
+
+    TF_OD, concentrations, T0_bck, TF_bck, T0_median = hr.retrieve('184A1', '17-AAG')
+    GI_50 = 10**(-tr.retrieve('184A1', '17-AAG'))
+    print GI_50
+
+    # QC.check_reader_consistency([hr.cell_idx.keys(), tr.cell_idx.keys(), cr.cassificant_index.keys()])
+    # QC.check_reader_consistency([hr.drug_versions.keys(), tr.drug_idx.keys(), dr.cassificant_index.keys()])
+
+    T0, TF, fold_growth, sigmas = SF.correct_values(TF_OD, T0_bck, TF_bck, T0_median, hr.std_of_tools)
+
+    PD.bi_plot(fold_growth, concentrations, hr.std_of_tools)
+    PD.bi_plot(sigmas, concentrations, std_of_tools=1., filter_level=9., GI_50=GI_50)
+
+
+def test_GI_50_reader():
+    tr = GI_50_reader('C:\\Users\\Andrei\\Desktop', 'sd02.tsv')
+    print tr.retrieve('HCC1954', 'XRP44X')
+
 if __name__ == "__main__":
-    hr = historical_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
-    pprint(hr.return_relevant_values().keys())
-    # show_2d_array(hr.cl_drug_replicates)
-    # print hr.cell_idx_rv[37], hr.drug_idx_rv[32]
-    # print hr.std_of_tools
-
-    # extr_vals, extr_concs, T0_bck, TF_bck, T0_median = extract(hr.storage, 'HCC2185', '17-AAG', hr.drug_versions,
-    #                                                             hr.cell_idx, hr.drug_idx, hr.T0_background,
-    #                                                             hr.TF_background, hr.T0_median)
-
-    extr_vals, extr_concs, T0_bck, TF_bck, T0_median = extract(hr.storage, 'HCC202', 'Rapamycin', hr.drug_versions,
-                                                                hr.cell_idx, hr.drug_idx, hr.T0_background,
-                                                                hr.TF_background, hr.T0_median)
-
-    # use reverse lookup to find an element with a lot of replications
-
-    T0, TF, fold_growth, sigmas = correct_values(extr_vals, T0_bck, TF_bck, T0_median, hr.std_of_tools)
-
-    raw_plot(fold_growth, extr_concs, hr.std_of_tools)
-    means, errs, stds, freedom_degs, unique_concs = compute_stats(fold_growth, extr_concs, hr.std_of_tools)
-    summary_plot(means, errs, unique_concs)
-    plt.show()
-
-    raw_plot(sigmas, extr_concs, 1.)
-    means, errs, stds, freedom_degs, unique_concs = compute_stats(sigmas, extr_concs, 1.)
-    print 'errs', errs
-    msk = errs < 9
-    print unique_concs, unique_concs[msk]
-    means = means[msk]
-    errs = errs[msk]
-    anchor = unique_concs[1]/4
-    unique_concs = unique_concs[msk]
-    print means.shape, errs.shape, unique_concs.shape
-    summary_plot(means, errs, unique_concs, anchor)
-    plt.show()
-
-    # TF_means, TF_errs, TF_stds, TF_dfs, unique_concs = compute_stats(TF, extr_concs, hr.noise_level)
-    # T0_means, T0_errs, T0_stds, T0_dfs, unique_concs = compute_stats(T0[:, :, np.newaxis], extr_concs, hr.noise_level)
-
-    # alphas = SF.logistic_regression(TF, T0, extr_concs, hr.std_of_tools)
-    #
-    # raw_plot(alphas, extr_concs, 0.0)
-    # # means, errs, unique_concs = compute_stats(extr_vals, extr_concs, hr.noise_level)
-    # summary_plot(alpha_means, [np.sqrt(alpha_stds**2+alpha_mins**2)/np.sqrt(alpha_dfs),
-    #                            np.sqrt(alpha_stds**2+alpha_maxs**2)/np.sqrt(alpha_dfs)], unique_concs)
-    # plt.show()
-
-    # TODO: replace the upper bound in case the actual data point is below 0
+    test_raw_data_reader()
+    # test_GI_50_reader()

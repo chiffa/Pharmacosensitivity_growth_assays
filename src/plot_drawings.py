@@ -4,6 +4,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from chiffatools.Linalg_routines import rm_nans
 from chiffatools.dataviz import better2D_desisty_plot
+import supporting_functions as SF
 from scipy import stats
 
 
@@ -65,6 +66,24 @@ def summary_plot(means, mean_err, concentrations, anchor=None):
     ymax = means + mean_err
     ymin = means - mean_err
     plt.fill_between(concentrations, ymax, ymin, facecolor='red', alpha=0.5)
+
+
+def bi_plot(raw_points, concentrations, std_of_tools, filter_level = None, GI_50=np.nan):
+    rp_noise = stats.norm.interval(.95, scale=std_of_tools)
+    raw_plot(raw_points, concentrations, rp_noise)
+    means, errs, stds, freedom_degs, unique_concs = SF.compute_stats(raw_points, concentrations, std_of_tools)
+    anchor = None
+    if filter_level is not None:
+        msk = errs < filter_level
+        means = means[msk]
+        errs = errs[msk]
+        anchor = unique_concs[1]/4
+        unique_concs = unique_concs[msk]
+    summary_plot(means, errs, unique_concs, anchor)
+    if GI_50 != np.nan:
+        plt.axvline(GI_50, color='k')
+
+    plt.show()
 
 
 def pretty_gradual_plot(data, concentrations, strain_name_map, drug_name, blank_line=200):
