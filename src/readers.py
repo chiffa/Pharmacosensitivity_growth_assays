@@ -119,7 +119,8 @@ class raw_data_reader(object):
         return render_dict
 
 
-    def retrieve(self, cell, drug, correct_plates=True, correct_background=True):
+    def retrieve(self, cell, drug, correct_plates=True, correct_replicates=True,
+                 correct_background=True, correct_lower_boundary=True, correct_C0=False):
 
         drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
 
@@ -135,20 +136,27 @@ class raw_data_reader(object):
         def plate_error_correction(value_set):
             for i in range(0, value_set.shape[0]):
                 mean_arr = np.nanmean(value_set[i, :, :], axis=1)
-                if np.max(mean_arr) - np.min(mean_arr) < 10*self.std_of_tools:
+                if np.max(mean_arr) - np.min(mean_arr) < 15*self.std_of_tools:
                     print "plate-wide lack of action detected for %s, %s at level %s" % (cell, drug, i)
-                    print mean_arr, np.max(mean_arr)-np.min(mean_arr)
+                    print mean_arr, (np.max(mean_arr)-np.min(mean_arr))/self.std_of_tools
                     value_set[i, :, :] = np.nan
             return value_set
 
         cell_n = self.cell_idx[cell]
         retained_drugs = [drug_v for drug_v in self.drug_versions[drug] if not nan(self.drug_idx[drug_v])]
-        print retained_drugs
 
         drugs_nos = [self.drug_idx[drug_v] for drug_v in retained_drugs]
-        drug_vals = [self.storage[cell_n, drug_n] for drug_n in drugs_nos]
+        drug_vals = [self.storage[cell_n, drug_n].copy() for drug_n in drugs_nos]
+
         if correct_plates:
             drug_vals = [plate_error_correction(val) for val in drug_vals]
+
+        if correct_replicates:
+            drug_vals = [np.apply_along_axis(SF.clean_tri_replicates, 2, value, self.std_of_tools) for value in drug_vals]
+
+        if correct_C0:
+            drug_vals = [SF.C0_correction(value)*100*self.std_of_tools for value in drug_vals]
+
         drug_c = [drug_v[1]*drug_c_array for drug_v in retained_drugs]
 
         drug_vals = np.hstack(drug_vals)
@@ -157,16 +165,23 @@ class raw_data_reader(object):
         c_argsort = np.argsort(drug_c)
 
         drug_c = drug_c[c_argsort]
-        drug_vals = drug_vals[:, c_argsort, :]  # standard error of mean is the standard deviation divided by the sqrt of number of non-nul elements
+        drug_vals = drug_vals[:, c_argsort, :]
 
-        T0_bck_vals = helper_round(self.T0_background)
-        TF_bck_vals = helper_round(self.TF_background)
-        T0_vals = helper_round(self.T0_median)
+        T0_bck_vals = helper_round(self.T0_background.copy())
+        TF_bck_vals = helper_round(self.TF_background.copy())
+        T0_vals = helper_round(self.T0_median.copy())
 
+        if correct_background:
+            drug_vals -= TF_bck_vals[:,:, np.newaxis]
+            T0_vals -= T0_bck_vals[:, :]
 
+        if correct_lower_boundary:
+            drug_vals = SF.get_boundary_correction(drug_vals, self.std_of_tools)
 
-        return drug_vals, drug_c, T0_bck_vals, TF_bck_vals, T0_vals
+        return drug_vals, drug_c, T0_vals
 
+    def run_QC(self):
+        pass
 
 class GI_50_reader(object):
 
@@ -202,6 +217,9 @@ class GI_50_reader(object):
         else:
             return np.NaN
 
+    def run_QC(self):
+        pass
+
 
 class classification_reader(object):
 
@@ -227,25 +245,71 @@ class classification_reader(object):
         self.markers = markers
 
 
-def test_raw_data_reader():
-    hr = raw_data_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
-    tr = GI_50_reader('C:\\Users\\Andrei\\Desktop', 'sd05-bis.tsv')
+def full_round(cell_line, drug, color='black'):
+    TF_OD, concentrations, T0_median = hr.retrieve(cell_line, drug)
+    re_TF_OD, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False)
+    GI_50 = 10**(-tr.retrieve(cell_line, drug))
+
+    fold_growth, sigmas, nc_sigmas = SF.get_relative_growth(TF_OD, T0_median, hr.std_of_tools)
+    re_fold_growth, re_sigmas, re_nc_sigmas = SF.get_relative_growth(re_TF_OD, T0_median, hr.std_of_tools)
+
+    # means, errs, unique_concs = PD.bi_plot(fold_growth, concentrations, hr.std_of_tools)
+    means, errs, unique_concs = PD.bi_plot(nc_sigmas, re_nc_sigmas, concentrations,
+                                           1.,
+                                           # GI_50=GI_50,
+                                           color=color,
+                                           legend=cell_line)
+    # means, errs, unique_concs = PD.bi_plot(sigmas, re_sigmas, concentrations, 1., GI_50=GI_50, color=color)
+
+    return means, errs, unique_concs
+
+def compare_to_htert(cell_line, drug):
+    plt.title('%s, %s' % (cell_line, drug))
+
+    full_round('184A1', drug, 'red')
+    full_round('184B5', drug, 'green')
+
+    full_round(cell_line, drug, 'black')
+
+    plt.gcf().set_size_inches(25, 15, forward=True)
+    plt.autoscale(tight=True)
+    plt.legend()
+
+    plt.savefig('../analysis_runs/%s - %s.png'%(cell_line, drug) )
+
+    SF.safe_dir_create('../analysis_runs/by_drug/%s/'%drug)
+    plt.savefig('../analysis_runs/by_drug/%s/%s - %s.png'%(drug, cell_line, drug))
+
+    SF.safe_dir_create('../analysis_runs/by_cell_line/%s/'%cell_line)
+    plt.savefig('../analysis_runs/by_cell_line/%s/%s - %s.png'%(cell_line, cell_line, drug))
+
+def perform_iteration():
+
+    def nan(_drug_n):
+            return np.all(np.isnan(hr.storage[cell_n, _drug_n]))
+
+    for drug in hr.drug_versions.keys():
+        for cell_line, cell_n in hr.cell_idx.iteritems():
+            if not cell_line in ['184A1', '184B5']:
+                if [drug_v for drug_v in hr.drug_versions[drug] if not nan(hr.drug_idx[drug_v])]:
+                    print cell_line, drug
+                    compare_to_htert(cell_line, drug)
+                    plt.clf()
+
+
     # cr = classification_reader('C:\\Users\\Andrei\\Desktop', 'sd01-bis.tsv')
     # dr = classification_reader('C:\\Users\\Andrei\\Desktop', 's5.tsv')
 
     # TF_OD, concentrations, T0_bck, TF_bck, T0_median = hr.retrieve('HCC202', 'Rapamycin')
     # GI_50 = 10**(-tr.retrieve('HCC202', 'Rapamycin'))
 
-    TF_OD, concentrations, T0_bck, TF_bck, T0_median = hr.retrieve('184A1', '17-AAG')
-    GI_50 = 10**(-tr.retrieve('184A1', '17-AAG'))
-
     # QC.check_reader_consistency([hr.cell_idx.keys(), tr.cell_idx.keys(), cr.cassificant_index.keys()])
     # QC.check_reader_consistency([hr.drug_versions.keys(), tr.drug_idx.keys(), dr.cassificant_index.keys()])
 
-    T0, TF, fold_growth, sigmas = SF.correct_values(TF_OD, T0_bck, TF_bck, T0_median, hr.std_of_tools)
 
-    PD.bi_plot(fold_growth, concentrations, hr.std_of_tools)
-    PD.bi_plot(sigmas, concentrations, std_of_tools=1., filter_level=9., GI_50=GI_50)
+    compare_to_htert('AU565', '17-AAG')
+
+    plt.show()
 
 
 def test_GI_50_reader():
@@ -254,7 +318,10 @@ def test_GI_50_reader():
 
 
 if __name__ == "__main__":
-    test_raw_data_reader()
-    # test_GI_50_reader()
+    hr = raw_data_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
+    tr = GI_50_reader('C:\\Users\\Andrei\\Desktop', 'sd05-bis.tsv')
 
-    #TODO: plot raw points in black for points that were kept and in red - points that were eliminated
+    perform_iteration()
+
+    # test_raw_data_reader()
+    # test_GI_50_reader()

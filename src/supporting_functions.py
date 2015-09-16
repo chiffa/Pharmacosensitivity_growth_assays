@@ -4,8 +4,14 @@ import numpy as np
 from chiffatools.Linalg_routines import rm_nans
 from scipy.stats import t, norm
 from scipy.spatial.distance import pdist
+import os
 
 drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
+
+
+def safe_dir_create(path):
+    if not os.path.isdir(path):
+        os.makedirs(path)
 
 
 def index(myset):
@@ -62,19 +68,18 @@ def get_boundary_correction(TF, background_std):
 
     surviving_fraction = np.vectorize(surviving_fraction)
     violating_TF_mask = TF < background_std*1.96
-    TF[violating_TF_mask] = surviving_fraction(TF[violating_TF_mask])
+    if np.any(violating_TF_mask):
+        TF[violating_TF_mask] = surviving_fraction(TF[violating_TF_mask])
 
     return TF
 
 
-def correct_values(raw_values, T0_bck, TF_bck, initial, std):
-    TF_supressed = raw_values - TF_bck[:, :, np.newaxis]
-    TF_supressed = get_boundary_correction(TF_supressed, std)
-    T0_supressed = initial - T0_bck
-    fold_growth = TF_supressed - T0_supressed[:, :, np.newaxis]
+def get_relative_growth(raw_values, initial, std):
+    fold_growth = raw_values - initial[:, :, np.newaxis]
     sigmas = fold_growth / std
+    nc_sigmas = raw_values / std
 
-    return T0_supressed, TF_supressed, fold_growth, sigmas
+    return fold_growth, sigmas, nc_sigmas
 
 
 def get_t_distro_outlier_bound_estimation(array, background_std):
@@ -84,56 +89,43 @@ def get_t_distro_outlier_bound_estimation(array, background_std):
     low, up = t.interval(0.95, narray.shape[0]-1, np.mean(narray), np.sqrt(np.var(narray)+background_std**2))
     up, low = (up-np.mean(narray), np.mean(narray)-low)
 
-    # percentiles = 100/narray.shape[0]
-    # print narray, narray.shape[0]
-    #
-    # base = t.interval((100. - 2.*percentiles)/100., narray.shape[0])
-    # desired = t.interval(0.95, narray.shape[0]-1)
-    #
-    # twister = desired[1] / base[1]
-    # up = (np.max(narray)-np.mean(narray))*twister
-    # low = (np.mean(narray)-np.min(narray))* twister
-
     return max(up, low)
 
 
-def one_exclusion(points):
+def clean_tri_replicates(points, std_of_tools):
     """
 
     :param points:
     :return:
     """
-    # print points
     if all(np.isnan(points)):
         return points
     arr_of_interest = pdist(points[:, np.newaxis])
     _min, _max = (np.min(arr_of_interest), np.max(arr_of_interest))
-    # print 'dist mat', arr_of_interest
-    # print 'min-max', _min, _max
-    containment = t.interval(0.95, 1, scale=_min/2)[1] # todo: std of tools
-    # print 'containment_interval', containment
+    containment = t.interval(0.95, 1, scale=_min/2)[1]
 
     if _max > containment:
         outlier = 2 - np.argmin(arr_of_interest)
-        # print 'possible outlier detected:', points, outlier
         msk  = np.array([True, True, True])
         msk[outlier] = False
         _mean, _std = (np.mean(points[msk]), np.std(points[msk]))
-        containment_2 = t.interval(0.95, 1, loc=_mean, scale=_std) # TODO: std of tools
-        # print 'second-level containment verification:', containment_2, points[outlier]
+        containment_2 = t.interval(0.95, 1, loc=_mean, scale=np.sqrt(_std**2+std_of_tools**2))
         if points[outlier] > containment_2[1] or points[outlier] < containment_2[0]:
-            # print 'outlier confirmed'
             points[outlier] = np.nan
 
     return points
 
 
+def C0_correction(value_set):
+    for i in range(0, value_set.shape[0]):
+        if not np.all(np.isnan(value_set)):
+            value_set[i, :, :] /= np.nanmean(value_set[i, 0, :])
+    return value_set
+
+
 def compute_stats(values, concentrations, background_std, clean=True):
 
     unique_values = np.unique(concentrations)
-
-    if clean:
-        values = np.apply_along_axis(one_exclusion, 2, values)
 
     means = np.zeros_like(unique_values)
     errs = np.zeros_like(unique_values)
@@ -146,7 +138,7 @@ def compute_stats(values, concentrations, background_std, clean=True):
         stds[i] = np.sqrt(np.std(vals)**2 + background_std**2)
         freedom_degs[i] = np.max((vals.shape[0] - 1, 1))
         # errs[i] = stds[i]/np.sqrt(freedom_degs[i])
-        errs[i] = get_t_distro_outlier_bound_estimation(vals, background_std)/freedom_degs[i] # TODO: incorporate std error of the data
+        errs[i] = get_t_distro_outlier_bound_estimation(vals, background_std)/freedom_degs[i]
 
     return means, errs, stds, freedom_degs, unique_values
 

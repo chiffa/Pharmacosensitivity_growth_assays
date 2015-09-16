@@ -28,7 +28,8 @@ def correlation_plot(x, y):
     print "r-squared:", r_value**2
 
 
-def raw_plot(values, concentrations, noise_level):
+def raw_plot(values, full_values, concentrations, noise_level, color):
+
     m_i = values.shape[0]
     m_j = values.shape[2]
 
@@ -54,23 +55,24 @@ def raw_plot(values, concentrations, noise_level):
         for j in range(0, m_j):
             # temp_concs = concentrations
             temp_concs = concentrations*np.random.uniform(0.95, 1.05, 1)
-            plt.errorbar(temp_concs, values[i, :, j], yerr=[errs[0][i, :, j], errs[1][i, :, j]], fmt='.')
+            plt.errorbar(temp_concs, full_values[i, :, j], yerr=[errs[0][i, :, j], errs[1][i, :, j]], fmt='.', color=color, alpha=0.25)
+            plt.errorbar(temp_concs, values[i, :, j], yerr=[errs[0][i, :, j], errs[1][i, :, j]], fmt='.', color=color)
 
 
-def summary_plot(means, mean_err, concentrations, anchor=None):
+
+def summary_plot(means, mean_err, concentrations, anchor=None, color='black', legend=''):
     if anchor is None:
         concentrations[0] = concentrations[1]/4
     else:
         concentrations[0] = anchor
-    plt.errorbar(concentrations, means, yerr=mean_err)
+    plt.errorbar(concentrations, means, yerr=mean_err, color=color, label=legend)
     ymax = means + mean_err
     ymin = means - mean_err
-    plt.fill_between(concentrations, ymax, ymin, facecolor='red', alpha=0.5)
+    plt.fill_between(concentrations, ymax, ymin, facecolor=color, alpha=0.25)
 
 
-def bi_plot(raw_points, concentrations, std_of_tools, filter_level = None, GI_50=np.nan):
+def bi_plot(raw_points, full_raw_points, concentrations, std_of_tools, filter_level=None, GI_50=np.nan, color='black', legend=''):
     rp_noise = stats.norm.interval(.95, scale=std_of_tools)[1]
-    raw_plot(raw_points, concentrations, rp_noise)
     means, errs, stds, freedom_degs, unique_concs = SF.compute_stats(raw_points, concentrations, std_of_tools)
     anchor = None
     if filter_level is not None:
@@ -79,11 +81,15 @@ def bi_plot(raw_points, concentrations, std_of_tools, filter_level = None, GI_50
         errs = errs[msk]
         anchor = unique_concs[1]/4
         unique_concs = unique_concs[msk]
-    summary_plot(means, errs, unique_concs, anchor)
+        for i, conc in enumerate(concentrations):
+            if conc not in unique_concs:
+                raw_points[:, i, :] = np.nan
+    raw_plot(raw_points, full_raw_points, concentrations, rp_noise, color)
+    summary_plot(means, errs, unique_concs, anchor, color, legend=legend)
     if GI_50 != np.nan:
-        plt.axvline(GI_50, color='k')
+        plt.axvline(GI_50, color=color)
 
-    plt.show()
+    return means, errs, unique_concs
 
 
 def pretty_gradual_plot(data, concentrations, strain_name_map, drug_name, blank_line=200):
