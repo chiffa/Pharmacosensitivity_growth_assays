@@ -3,6 +3,7 @@ __author__ = 'Andrei'
 import numpy as np
 from chiffatools.Linalg_routines import rm_nans
 from scipy.stats import t, norm
+from scipy.spatial.distance import pdist
 
 drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
 
@@ -96,20 +97,43 @@ def get_t_distro_outlier_bound_estimation(array, background_std):
     return max(up, low)
 
 
-def compute_stats(values, concentrations, background_std):
+def one_exclusion(points):
+    """
 
-    # TODO: if several repeats present, print that a problem was detected, then decide which plate is to be dismissed
+    :param points:
+    :return:
+    """
+    # print points
+    if all(np.isnan(points)):
+        return points
+    arr_of_interest = pdist(points[:, np.newaxis])
+    _min, _max = (np.min(arr_of_interest), np.max(arr_of_interest))
+    # print 'dist mat', arr_of_interest
+    # print 'min-max', _min, _max
+    containment = t.interval(0.95, 1, scale=_min/2)[1] # todo: std of tools
+    # print 'containment_interval', containment
 
-    # TODO: within-repeats error correction comes here => 10 of background_stds from 0
+    if _max > containment:
+        outlier = 2 - np.argmin(arr_of_interest)
+        # print 'possible outlier detected:', points, outlier
+        msk  = np.array([True, True, True])
+        msk[outlier] = False
+        _mean, _std = (np.mean(points[msk]), np.std(points[msk]))
+        containment_2 = t.interval(0.95, 1, loc=_mean, scale=_std) # TODO: std of tools
+        # print 'second-level containment verification:', containment_2, points[outlier]
+        if points[outlier] > containment_2[1] or points[outlier] < containment_2[0]:
+            # print 'outlier confirmed'
+            points[outlier] = np.nan
 
-    # for i in range(0, values.shape[0]): #problem: we are operating on fused arrays, that might be chainings of a failed plate and successfull plate
-    #     mean_arr = np.nanmean(values[i, :, :], axis=1)
-    #     print mean_arr.shape
-    #     print i, np.max(mean_arr)-np.min(mean_arr)
-    #     if np.max(mean_arr)-np.min(mean_arr) < 10*background_std:
-    #         values[i, :, :] = np.nan
+    return points
+
+
+def compute_stats(values, concentrations, background_std, clean=True):
 
     unique_values = np.unique(concentrations)
+
+    if clean:
+        values = np.apply_along_axis(one_exclusion, 2, values)
 
     means = np.zeros_like(unique_values)
     errs = np.zeros_like(unique_values)
@@ -126,8 +150,6 @@ def compute_stats(values, concentrations, background_std):
 
     return means, errs, stds, freedom_degs, unique_values
 
-def logistics():
-    pass
 
 def logistic_regression(TF, T0, concentrations, background_std):
 

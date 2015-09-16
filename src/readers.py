@@ -119,7 +119,7 @@ class raw_data_reader(object):
         return render_dict
 
 
-    def retrieve(self, cell, drug, correct_plates=True):
+    def retrieve(self, cell, drug, correct_plates=True, correct_background=True):
 
         drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
 
@@ -163,6 +163,8 @@ class raw_data_reader(object):
         TF_bck_vals = helper_round(self.TF_background)
         T0_vals = helper_round(self.T0_median)
 
+
+
         return drug_vals, drug_c, T0_bck_vals, TF_bck_vals, T0_vals
 
 
@@ -181,7 +183,7 @@ class GI_50_reader(object):
                 cells.append(row[0])
                 data_matrix.append(np.genfromtxt(np.array(row[1:])).astype(np.float64))
 
-        cell_idx = SF.index(cells)  # MAJOR ERROR HERE!!!!!!!! SET unsets the ordering!!!!!!!!
+        cell_idx = SF.index(cells)
         drug_idx = SF.index(drugs)
 
         cell_idx_rv = dict([(value, key) for key, value in cell_idx.iteritems()])
@@ -254,3 +256,5 @@ def test_GI_50_reader():
 if __name__ == "__main__":
     test_raw_data_reader()
     # test_GI_50_reader()
+
+    #TODO: plot raw points in black for points that were kept and in red - points that were eliminated

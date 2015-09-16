@@ -74,7 +74,7 @@ def bi_plot(raw_points, concentrations, std_of_tools, filter_level = None, GI_50
     means, errs, stds, freedom_degs, unique_concs = SF.compute_stats(raw_points, concentrations, std_of_tools)
     anchor = None
     if filter_level is not None:
-        msk = errs < filter_level
+        msk = errs < filter_level*std_of_tools
         means = means[msk]
         errs = errs[msk]
         anchor = unique_concs[1]/4
