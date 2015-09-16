@@ -97,6 +97,18 @@ def get_t_distro_outlier_bound_estimation(array, background_std):
 
 
 def compute_stats(values, concentrations, background_std):
+
+    # TODO: if several repeats present, print that a problem was detected, then decide which plate is to be dismissed
+
+    # TODO: within-repeats error correction comes here => 10 of background_stds from 0
+
+    # for i in range(0, values.shape[0]): #problem: we are operating on fused arrays, that might be chainings of a failed plate and successfull plate
+    #     mean_arr = np.nanmean(values[i, :, :], axis=1)
+    #     print mean_arr.shape
+    #     print i, np.max(mean_arr)-np.min(mean_arr)
+    #     if np.max(mean_arr)-np.min(mean_arr) < 10*background_std:
+    #         values[i, :, :] = np.nan
+
     unique_values = np.unique(concentrations)
 
     means = np.zeros_like(unique_values)

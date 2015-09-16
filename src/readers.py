@@ -119,7 +119,7 @@ class raw_data_reader(object):
         return render_dict
 
 
-    def retrieve(self, cell, drug):
+    def retrieve(self, cell, drug, correct_plates=True):
 
         drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
 
@@ -132,14 +132,23 @@ class raw_data_reader(object):
             T_container_vals = T_container_vals[:, c_argsort]
             return T_container_vals
 
+        def plate_error_correction(value_set):
+            for i in range(0, value_set.shape[0]):
+                mean_arr = np.nanmean(value_set[i, :, :], axis=1)
+                if np.max(mean_arr) - np.min(mean_arr) < 10*self.std_of_tools:
+                    print "plate-wide lack of action detected for %s, %s at level %s" % (cell, drug, i)
+                    print mean_arr, np.max(mean_arr)-np.min(mean_arr)
+                    value_set[i, :, :] = np.nan
+            return value_set
+
         cell_n = self.cell_idx[cell]
         retained_drugs = [drug_v for drug_v in self.drug_versions[drug] if not nan(self.drug_idx[drug_v])]
         print retained_drugs
 
         drugs_nos = [self.drug_idx[drug_v] for drug_v in retained_drugs]
-
-        drug_vals = [self.storage[cell_n, drug_n] for drug_n in drugs_nos ]
-
+        drug_vals = [self.storage[cell_n, drug_n] for drug_n in drugs_nos]
+        if correct_plates:
+            drug_vals = [plate_error_correction(val) for val in drug_vals]
         drug_c = [drug_v[1]*drug_c_array for drug_v in retained_drugs]
 
         drug_vals = np.hstack(drug_vals)
@@ -148,7 +157,7 @@ class raw_data_reader(object):
         c_argsort = np.argsort(drug_c)
 
         drug_c = drug_c[c_argsort]
-        drug_vals = drug_vals[:, c_argsort, :] # standard error of mean is the standard deviation divided by the sqrt of number of non-nul elements
+        drug_vals = drug_vals[:, c_argsort, :]  # standard error of mean is the standard deviation divided by the sqrt of number of non-nul elements
 
         T0_bck_vals = helper_round(self.T0_background)
         TF_bck_vals = helper_round(self.TF_background)
@@ -172,9 +181,6 @@ class GI_50_reader(object):
                 cells.append(row[0])
                 data_matrix.append(np.genfromtxt(np.array(row[1:])).astype(np.float64))
 
-        print cells
-        print drugs
-
         cell_idx = SF.index(cells)  # MAJOR ERROR HERE!!!!!!!! SET unsets the ordering!!!!!!!!
         drug_idx = SF.index(drugs)
 
@@ -190,8 +196,6 @@ class GI_50_reader(object):
 
     def retrieve(self, celline, drug):
         if self.cell_idx.has_key(celline) and self.drug_idx.has_key(drug):
-            print celline, self.cell_idx[celline]
-            print drug, self.drug_idx[drug]
             return self.GI_50[self.cell_idx[celline], self.drug_idx[drug]]
         else:
             return np.NaN
@@ -232,7 +236,6 @@ def test_raw_data_reader():
 
     TF_OD, concentrations, T0_bck, TF_bck, T0_median = hr.retrieve('184A1', '17-AAG')
     GI_50 = 10**(-tr.retrieve('184A1', '17-AAG'))
-    print GI_50
 
     # QC.check_reader_consistency([hr.cell_idx.keys(), tr.cell_idx.keys(), cr.cassificant_index.keys()])
     # QC.check_reader_consistency([hr.drug_versions.keys(), tr.drug_idx.keys(), dr.cassificant_index.keys()])
@@ -246,6 +249,7 @@ def test_raw_data_reader():
 def test_GI_50_reader():
     tr = GI_50_reader('C:\\Users\\Andrei\\Desktop', 'sd02.tsv')
     print tr.retrieve('HCC1954', 'XRP44X')
+
 
 if __name__ == "__main__":
     test_raw_data_reader()
