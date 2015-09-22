@@ -14,6 +14,7 @@ import Quality_Controls as QC
 from matplotlib import pyplot as plt
 from StringIO import StringIO
 from slugify import slugify
+from scipy.linalg import block_diag
 
 class raw_data_reader(object):
 
@@ -121,7 +122,7 @@ class raw_data_reader(object):
 
 
     def retrieve(self, cell, drug, correct_plates=True, correct_replicates=True,
-                 correct_background=True, correct_lower_boundary=True, correct_C0=False):
+                 correct_background=True, correct_lower_boundary=True, correct_C0=False, assemble_plates=True):
 
         drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
 
@@ -130,7 +131,10 @@ class raw_data_reader(object):
 
         def helper_round(T_container):
             T_container_vals = [np.repeat(T_container[cell_n, drug_n][:, np.newaxis], 10, axis=1) for drug_n in drugs_nos]
-            T_container_vals = np.hstack(T_container_vals)
+            if assemble_plates:
+                T_container_vals = np.hstack(T_container_vals)
+            else:
+                T_container_vals = SF.block_fusion(T_container_vals)
             T_container_vals = T_container_vals[:, c_argsort]
             return T_container_vals
 
@@ -168,7 +172,11 @@ class raw_data_reader(object):
 
         drug_c = [drug_v[1]*drug_c_array for drug_v in retained_drugs]
 
-        drug_vals = np.hstack(drug_vals)
+        if assemble_plates:
+            drug_vals = np.hstack(drug_vals)
+        else:
+            drug_vals = SF.block_fusion(drug_vals)
+
         drug_c = np.hstack(drug_c)
 
         c_argsort = np.argsort(drug_c)
@@ -256,8 +264,8 @@ class classification_reader(object):
 
 def full_round(cell_line, drug, color='black'):
     TF_OD, concentrations, T0_median = hr.retrieve(cell_line, drug)
-    re_TF_OD, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False)
-    GI_50 = 10**(-tr.retrieve(cell_line, drug))
+    re_TF_OD, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False, assemble_plates=False)
+    # GI_50 = 10**(-tr.retrieve(cell_line, drug))
     # TODO: line at the 0 level for the starting concentration
     # TODO: de-assemble the sigmas and fold growth for repeats
 
@@ -273,6 +281,28 @@ def full_round(cell_line, drug, color='black'):
     # means, errs, unique_concs = PD.bi_plot(sigmas, re_sigmas, concentrations, 1., GI_50=GI_50, color=color)
 
     return means, errs, unique_concs
+
+
+def fragmented_round(cell_line, drug, color='black'):
+    TF_OD, concentrations, T0_median = hr.retrieve(cell_line, drug)
+    re_TF_OD, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False, assemble_plates=False)
+    # GI_50 = 10**(-tr.retrieve(cell_line, drug))
+    # TODO: line at the 0 level for the starting concentration
+    # TODO: de-assemble the sigmas and fold growth for repeats
+
+    for i in range(0, TF_OD.shape[0]):
+        print i
+        print TF_OD[i, :, :]
+        # fold_growth, sigmas, nc_sigmas = SF.get_relative_growth(TF_OD, T0_median, hr.std_of_tools)
+        # re_fold_growth, re_sigmas, re_nc_sigmas = SF.get_relative_growth(re_TF_OD, T0_median, hr.std_of_tools)
+        #
+        # means, errs, unique_concs = PD.bi_plot(nc_sigmas, re_nc_sigmas, concentrations,
+        #                                        1.,
+        #                                        color=color,
+        #                                        legend=cell_line)
+
+    return ''
+
 
 def compare_to_htert(cell_line, drug):
     plt.title('%s, %s' % (cell_line, drug))
@@ -336,7 +366,10 @@ if __name__ == "__main__":
     hr = raw_data_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
     tr = GI_50_reader('C:\\Users\\Andrei\\Desktop', 'sd05-bis.tsv')
 
-    perform_iteration()
+    # perform_iteration()
+
+    full_round('MB157' ,'Rapamycin')
+    plt.show()
 
     # test_raw_data_reader()
     # test_GI_50_reader()

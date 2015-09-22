@@ -143,6 +143,23 @@ def compute_stats(values, concentrations, background_std, clean=True):
     return means, errs, stds, freedom_degs, unique_values
 
 
+def block_fusion(arg_arr):
+    expansion_factor = len(arg_arr)
+    ghost = np.empty_like(arg_arr[0])
+    ghost.fill(np.nan)
+    new_arg_arr = []
+    for arr in arg_arr:
+        payload = [arr]
+        for i in range(0, expansion_factor-1):
+            payload.append(ghost)
+        new_arg_arr.append(np.vstack(tuple(payload)))
+
+    for elt in new_arg_arr:
+        print elt.shape
+
+    return np.hstack(arg_arr)
+
+
 def logistic_regression(TF, T0, concentrations, background_std):
 
     def get_1p_bounds(mean, std, dof):
