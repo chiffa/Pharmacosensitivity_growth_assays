@@ -264,7 +264,7 @@ class classification_reader(object):
 
 def full_round(cell_line, drug, color='black'):
     TF_OD, concentrations, T0_median = hr.retrieve(cell_line, drug)
-    re_TF_OD, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False, assemble_plates=False)
+    re_TF_OD, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False)
     # GI_50 = 10**(-tr.retrieve(cell_line, drug))
     # TODO: line at the 0 level for the starting concentration
     # TODO: de-assemble the sigmas and fold growth for repeats
@@ -284,15 +284,16 @@ def full_round(cell_line, drug, color='black'):
 
 
 def fragmented_round(cell_line, drug, color='black'):
-    TF_OD, concentrations, T0_median = hr.retrieve(cell_line, drug)
+    TF_OD, concentrations, T0_median = hr.retrieve(cell_line, drug, assemble_plates=False)
     re_TF_OD, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False, assemble_plates=False)
     # GI_50 = 10**(-tr.retrieve(cell_line, drug))
     # TODO: line at the 0 level for the starting concentration
     # TODO: de-assemble the sigmas and fold growth for repeats
 
     for i in range(0, TF_OD.shape[0]):
-        print i
-        print TF_OD[i, :, :]
+        print i, np.all(np.isnan(TF_OD[i, :, :]))
+        if not np.all(np.isnan(TF_OD[i, :, :])):
+            print TF_OD[i, :, :]
         # fold_growth, sigmas, nc_sigmas = SF.get_relative_growth(TF_OD, T0_median, hr.std_of_tools)
         # re_fold_growth, re_sigmas, re_nc_sigmas = SF.get_relative_growth(re_TF_OD, T0_median, hr.std_of_tools)
         #
@@ -368,7 +369,7 @@ if __name__ == "__main__":
 
     # perform_iteration()
 
-    full_round('MB157' ,'Rapamycin')
+    fragmented_round('MB157' ,'Rapamycin')
     plt.show()
 
     # test_raw_data_reader()

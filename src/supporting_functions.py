@@ -148,16 +148,16 @@ def block_fusion(arg_arr):
     ghost = np.empty_like(arg_arr[0])
     ghost.fill(np.nan)
     new_arg_arr = []
-    for arr in arg_arr:
-        payload = [arr]
-        for i in range(0, expansion_factor-1):
+    for i, arr in enumerate(arg_arr):
+        payload = []
+        for j in range(0, i):
+            payload.append(ghost)
+        payload.append(arr)
+        for j in range(i, expansion_factor-1):
             payload.append(ghost)
         new_arg_arr.append(np.vstack(tuple(payload)))
 
-    for elt in new_arg_arr:
-        print elt.shape
-
-    return np.hstack(arg_arr)
+    return np.hstack(new_arg_arr)
 
 
 def logistic_regression(TF, T0, concentrations, background_std):
