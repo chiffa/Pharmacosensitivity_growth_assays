@@ -83,7 +83,6 @@ def get_relative_growth(raw_values, initial, std):
 
 
 def get_t_distro_outlier_bound_estimation(array, background_std):
-
     narray = rm_nans(array)
 
     low, up = t.interval(0.95, narray.shape[0]-1, np.mean(narray), np.sqrt(np.var(narray)+background_std**2))

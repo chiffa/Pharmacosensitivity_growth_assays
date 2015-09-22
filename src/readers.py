@@ -287,31 +287,38 @@ def fragmented_round(cell_line, drug, color='black'):
     TF_OD, concentrations, T0_median = hr.retrieve(cell_line, drug, assemble_plates=False)
     re_TF_OD, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False, assemble_plates=False)
     # GI_50 = 10**(-tr.retrieve(cell_line, drug))
-    # TODO: line at the 0 level for the starting concentration
-    # TODO: de-assemble the sigmas and fold growth for repeats
+
+    # TODO: inject initial level, and error t_dist ddf 1 estimation
 
     for i in range(0, TF_OD.shape[0]):
-        print i, np.all(np.isnan(TF_OD[i, :, :]))
         if not np.all(np.isnan(TF_OD[i, :, :])):
-            print TF_OD[i, :, :]
-        # fold_growth, sigmas, nc_sigmas = SF.get_relative_growth(TF_OD, T0_median, hr.std_of_tools)
-        # re_fold_growth, re_sigmas, re_nc_sigmas = SF.get_relative_growth(re_TF_OD, T0_median, hr.std_of_tools)
-        #
-        # means, errs, unique_concs = PD.bi_plot(nc_sigmas, re_nc_sigmas, concentrations,
-        #                                        1.,
-        #                                        color=color,
-        #                                        legend=cell_line)
+            fold_growth, sigmas, nc_sigmas = SF.get_relative_growth(TF_OD[i, :, :][np.newaxis, :, :],
+                                                                    T0_median[i, :][np.newaxis, :],
+                                                                    hr.std_of_tools)
+
+            re_fold_growth, re_sigmas, re_nc_sigmas = SF.get_relative_growth(re_TF_OD[i, :, :][np.newaxis, :, :],
+                                                                             T0_median[i, :][np.newaxis, :],
+                                                                             hr.std_of_tools)
+
+            means, errs, unique_concs = PD.bi_plot(nc_sigmas, re_nc_sigmas, concentrations,
+                                                   1.,
+                                                   color=color,
+                                                   legend=cell_line)
 
     return ''
 
 
-def compare_to_htert(cell_line, drug):
+def compare_to_htert(cell_line, drug, fragmented):
     plt.title('%s, %s' % (cell_line, drug))
 
-    full_round('184A1', drug, 'red')
-    full_round('184B5', drug, 'green')
-
-    full_round(cell_line, drug, 'black')
+    if fragmented:
+        fragmented_round('184A1', drug, 'red')
+        fragmented_round('184B5', drug, 'green')
+        fragmented_round(cell_line, drug, 'black')
+    else:
+        full_round('184A1', drug, 'red')
+        full_round('184B5', drug, 'green')
+        full_round(cell_line, drug, 'black')
 
     plt.gcf().set_size_inches(25, 15, forward=True)
     plt.autoscale(tight=True)
@@ -329,7 +336,7 @@ def compare_to_htert(cell_line, drug):
     plt.savefig('../analysis_runs/by_cell_line/%s/%s.png'%(cell_line, drug))
 
 
-def perform_iteration():
+def perform_iteration(fragmented=False):
 
     def nan(_drug_n):
             return np.all(np.isnan(hr.storage[cell_n, _drug_n]))
@@ -339,7 +346,7 @@ def perform_iteration():
             if not cell_line in ['184A1', '184B5']:
                 if [drug_v for drug_v in hr.drug_versions[drug] if not nan(hr.drug_idx[drug_v])]:
                     print cell_line, drug
-                    compare_to_htert(cell_line, drug)
+                    compare_to_htert(cell_line, drug, fragmented)
                     plt.clf()
 
 
@@ -353,9 +360,9 @@ def perform_iteration():
     # QC.check_reader_consistency([hr.drug_versions.keys(), tr.drug_idx.keys(), dr.cassificant_index.keys()])
 
 
-    compare_to_htert('AU565', '17-AAG')
+    # compare_to_htert('AU565', '17-AAG', fragmented)
 
-    plt.show()
+    # plt.show()
 
 
 def test_GI_50_reader():
@@ -367,10 +374,10 @@ if __name__ == "__main__":
     hr = raw_data_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
     tr = GI_50_reader('C:\\Users\\Andrei\\Desktop', 'sd05-bis.tsv')
 
-    # perform_iteration()
+    perform_iteration(True)
 
-    fragmented_round('MB157' ,'Rapamycin')
-    plt.show()
+    # fragmented_round('MB157' ,'Rapamycin')
+    # plt.show()
 
     # test_raw_data_reader()
     # test_GI_50_reader()

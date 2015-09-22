@@ -75,15 +75,16 @@ def bi_plot(raw_points, full_raw_points, concentrations, std_of_tools, filter_le
     rp_noise = stats.norm.interval(.95, scale=std_of_tools)[1]
     means, errs, stds, freedom_degs, unique_concs = SF.compute_stats(raw_points, concentrations, std_of_tools)
     anchor = None
+    msk = np.logical_not(np.isnan(means))
     if filter_level is not None:
-        msk = errs < filter_level*std_of_tools
-        means = means[msk]
-        errs = errs[msk]
-        anchor = unique_concs[1]/4
-        unique_concs = unique_concs[msk]
-        for i, conc in enumerate(concentrations):
-            if conc not in unique_concs:
-                raw_points[:, i, :] = np.nan
+        msk = np.logical_and(msk, errs < filter_level*std_of_tools)
+    means = means[msk]
+    errs = errs[msk]
+    anchor = unique_concs[1]/4
+    unique_concs = unique_concs[msk]
+    for i, conc in enumerate(concentrations):
+        if conc not in unique_concs:
+            raw_points[:, i, :] = np.nan
     raw_plot(raw_points, full_raw_points, concentrations, rp_noise, color)
     summary_plot(means, errs, unique_concs, anchor, color, legend=legend)
     if GI_50 != np.nan:
