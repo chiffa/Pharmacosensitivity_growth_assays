@@ -13,6 +13,7 @@ from collections import defaultdict
 import Quality_Controls as QC
 from matplotlib import pyplot as plt
 from StringIO import StringIO
+from slugify import slugify
 
 class raw_data_reader(object):
 
@@ -133,11 +134,19 @@ class raw_data_reader(object):
             T_container_vals = T_container_vals[:, c_argsort]
             return T_container_vals
 
-        def plate_error_correction(value_set):
+        def plate_error_correction(value_set, _drug_n):
             for i in range(0, value_set.shape[0]):
                 mean_arr = np.nanmean(value_set[i, :, :], axis=1)
-                if np.max(mean_arr) - np.min(mean_arr) < 15*self.std_of_tools:
-                    print "plate-wide lack of action detected for %s, %s at level %s" % (cell, drug, i)
+                repress_flag = ''
+
+                if np.max(mean_arr) < 20*self.std_of_tools:
+                    repress_flag += 'too low'
+                if self.cl_drug_replicates[cell_n, _drug_n]>1 and \
+                    np.max(mean_arr) - np.min(mean_arr) < 5*self.std_of_tools:
+                    repress_flag += 'no variation'
+
+                if repress_flag:
+                    print "plate-wide lack of action detected for %s, %s at level %s by %s" % (cell, drug, i, repress_flag)
                     print mean_arr, (np.max(mean_arr)-np.min(mean_arr))/self.std_of_tools
                     value_set[i, :, :] = np.nan
             return value_set
@@ -149,7 +158,7 @@ class raw_data_reader(object):
         drug_vals = [self.storage[cell_n, drug_n].copy() for drug_n in drugs_nos]
 
         if correct_plates:
-            drug_vals = [plate_error_correction(val) for val in drug_vals]
+            drug_vals = [plate_error_correction(val, drug_n) for val, drug_n in zip(drug_vals, drugs_nos)]
 
         if correct_replicates:
             drug_vals = [np.apply_along_axis(SF.clean_tri_replicates, 2, value, self.std_of_tools) for value in drug_vals]
@@ -249,6 +258,8 @@ def full_round(cell_line, drug, color='black'):
     TF_OD, concentrations, T0_median = hr.retrieve(cell_line, drug)
     re_TF_OD, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False)
     GI_50 = 10**(-tr.retrieve(cell_line, drug))
+    # TODO: line at the 0 level for the starting concentration
+    # TODO: de-assemble the sigmas and fold growth for repeats
 
     fold_growth, sigmas, nc_sigmas = SF.get_relative_growth(TF_OD, T0_median, hr.std_of_tools)
     re_fold_growth, re_sigmas, re_nc_sigmas = SF.get_relative_growth(re_TF_OD, T0_median, hr.std_of_tools)
@@ -275,13 +286,17 @@ def compare_to_htert(cell_line, drug):
     plt.autoscale(tight=True)
     plt.legend()
 
-    plt.savefig('../analysis_runs/%s - %s.png'%(cell_line, drug) )
+    cell_line = slugify(cell_line)
+    drug = slugify(drug)
+
+    plt.savefig('../analysis_runs/vrac/%s - %s.png'%(cell_line, drug) )
 
     SF.safe_dir_create('../analysis_runs/by_drug/%s/'%drug)
-    plt.savefig('../analysis_runs/by_drug/%s/%s - %s.png'%(drug, cell_line, drug))
+    plt.savefig('../analysis_runs/by_drug/%s/%s.png'%(drug, cell_line))
 
     SF.safe_dir_create('../analysis_runs/by_cell_line/%s/'%cell_line)
-    plt.savefig('../analysis_runs/by_cell_line/%s/%s - %s.png'%(cell_line, cell_line, drug))
+    plt.savefig('../analysis_runs/by_cell_line/%s/%s.png'%(cell_line, drug))
+
 
 def perform_iteration():
 
