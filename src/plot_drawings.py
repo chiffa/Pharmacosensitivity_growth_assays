@@ -55,8 +55,11 @@ def raw_plot(values, full_values, concentrations, noise_level, color):
         for j in range(0, m_j):
             # temp_concs = concentrations
             temp_concs = concentrations*np.random.uniform(0.95, 1.05, 1)
-            plt.errorbar(temp_concs, full_values[i, :, j], yerr=[errs[0][i, :, j], errs[1][i, :, j]], fmt='.', color=color, alpha=0.25)
-            plt.errorbar(temp_concs, values[i, :, j], yerr=[errs[0][i, :, j], errs[1][i, :, j]], fmt='.', color=color)
+            nan_mask = np.logical_not(np.isnan(full_values[i, :, j]))
+            plt.errorbar(temp_concs[nan_mask], full_values[i, nan_mask, j],
+                         yerr=[errs[0][i, nan_mask, j], errs[1][i, nan_mask, j]], fmt='.', color=color, alpha=0.25)
+            plt.errorbar(temp_concs[nan_mask], values[i, nan_mask, j],
+                         yerr=[errs[0][i, nan_mask, j], errs[1][i, nan_mask, j]], fmt='.', color=color)
 
 
 
@@ -71,26 +74,48 @@ def summary_plot(means, mean_err, concentrations, anchor=None, color='black', le
     plt.fill_between(concentrations, ymax, ymin, facecolor=color, alpha=0.25)
 
 
-def bi_plot(raw_points, full_raw_points, concentrations, std_of_tools, filter_level=None, GI_50=np.nan, color='black', legend=''):
+def bi_plot(raw_points, full_raw_points, concentrations, std_of_tools, filter_level=None,
+            GI_50=np.nan, T0=np.nan, color='black', legend='', standardized=False):
+
     rp_noise = stats.norm.interval(.95, scale=std_of_tools)[1]
+
     means, errs, stds, freedom_degs, unique_concs = SF.compute_stats(raw_points, concentrations, std_of_tools)
-    anchor = None
     msk = np.logical_not(np.isnan(means))
+
     if filter_level is not None:
         msk = np.logical_and(msk, errs < filter_level*std_of_tools)
+
     means = means[msk]
     errs = errs[msk]
+    stds = errs[stds]
     anchor = unique_concs[1]/4
     unique_concs = unique_concs[msk]
     for i, conc in enumerate(concentrations):
         if conc not in unique_concs:
             raw_points[:, i, :] = np.nan
-    raw_plot(raw_points, full_raw_points, concentrations, rp_noise, color)
-    summary_plot(means, errs, unique_concs, anchor, color, legend=legend)
-    if GI_50 != np.nan:
-        plt.axvline(GI_50, color=color)
 
-    return means, errs, unique_concs
+    # TODO: this part, along with computation of retention needs to be factored out into supporting function
+    info = SF.calculate_information(means, stds)
+
+    if standardized:
+        if np.isnan(T0):
+            c_factor = means[0].copy()
+        else:
+            c_factor = T0
+        raw_points /= c_factor
+        full_raw_points /= c_factor
+        rp_noise /=c_factor
+        means /= c_factor
+        errs /= c_factor
+
+    if info > 3:
+        raw_plot(raw_points, full_raw_points, concentrations, rp_noise, color)
+        summary_plot(means, errs, unique_concs, anchor, color, legend='%s: %s' %(legend, info))
+        if GI_50 != np.nan:
+            plt.axvline(GI_50, color=color)
+        return means, errs, unique_concs
+    else:
+        return np.empty_like(means), np.empty_like(errs), unique_concs
 
 
 def pretty_gradual_plot(data, concentrations, strain_name_map, drug_name, blank_line=200):

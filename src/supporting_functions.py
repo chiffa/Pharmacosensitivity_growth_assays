@@ -93,6 +93,7 @@ def get_t_distro_outlier_bound_estimation(array, background_std):
 
 def clean_tri_replicates(points, std_of_tools):
     """
+    Deletes an element inside the triplicates if one of them is strongly outlying compared to the others
 
     :param points:
     :return:
@@ -157,6 +158,29 @@ def block_fusion(arg_arr):
         new_arg_arr.append(np.vstack(tuple(payload)))
 
     return np.hstack(new_arg_arr)
+
+
+def calculate_information(means, errs):
+
+    def inner_comparison(idx1, idx2):
+        return (means[idx1] - means[idx2]) / np.sqrt(errs[idx1]**2 + errs[idx2]**2)
+
+    total_delta = inner_comparison(0, -1)
+    high_start = inner_comparison(np.argmax(means), 0)
+    low_finish = inner_comparison(-1, np.argmin(means))
+    # print 'delta: %s, start: %s, finish: %s, total: %s' % (total_delta, high_start, low_finish,
+    #                                                        total_delta - high_start - low_finish)
+
+    return total_delta - high_start - low_finish
+
+
+def estimate_differences(mean_diff_array):
+    mean_diff_array = np.array(mean_diff_array)
+    return np.nanstd(mean_diff_array, axis=0, ddof=1)
+
+
+def correct_plates(plate):
+    return plate
 
 
 def logistic_regression(TF, T0, concentrations, background_std):

@@ -122,7 +122,7 @@ class raw_data_reader(object):
 
 
     def retrieve(self, cell, drug, correct_plates=True, correct_replicates=True,
-                 correct_background=True, correct_lower_boundary=True, correct_C0=False, assemble_plates=True):
+                 correct_background=True, correct_lower_boundary=True, correct_C0=False):
 
         drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
 
@@ -131,10 +131,7 @@ class raw_data_reader(object):
 
         def helper_round(T_container):
             T_container_vals = [np.repeat(T_container[cell_n, drug_n][:, np.newaxis], 10, axis=1) for drug_n in drugs_nos]
-            if assemble_plates:
-                T_container_vals = np.hstack(T_container_vals)
-            else:
-                T_container_vals = SF.block_fusion(T_container_vals)
+            T_container_vals = SF.block_fusion(T_container_vals)
             T_container_vals = T_container_vals[:, c_argsort]
             return T_container_vals
 
@@ -157,6 +154,8 @@ class raw_data_reader(object):
 
         cell_n = self.cell_idx[cell]
         retained_drugs = [drug_v for drug_v in self.drug_versions[drug] if not nan(self.drug_idx[drug_v])]
+        if retained_drugs == []:
+            retained_drugs = [drug_v for drug_v in self.drug_versions[drug]]
 
         drugs_nos = [self.drug_idx[drug_v] for drug_v in retained_drugs]
         drug_vals = [self.storage[cell_n, drug_n].copy() for drug_n in drugs_nos]
@@ -171,14 +170,9 @@ class raw_data_reader(object):
             drug_vals = [SF.C0_correction(value)*100*self.std_of_tools for value in drug_vals]
 
         drug_c = [drug_v[1]*drug_c_array for drug_v in retained_drugs]
-
-        if assemble_plates:
-            drug_vals = np.hstack(drug_vals)
-        else:
-            drug_vals = SF.block_fusion(drug_vals)
+        drug_vals = SF.block_fusion(drug_vals)
 
         drug_c = np.hstack(drug_c)
-
         c_argsort = np.argsort(drug_c)
 
         drug_c = drug_c[c_argsort]
@@ -187,6 +181,8 @@ class raw_data_reader(object):
         T0_bck_vals = helper_round(self.T0_background.copy())
         TF_bck_vals = helper_round(self.TF_background.copy())
         T0_vals = helper_round(self.T0_median.copy())
+        noize_dispersion = [helper_round(self.background[:, :, :, i].copy()) for i in range(0,4)]
+        noize_dispersion = SF.estimate_differences(noize_dispersion)
 
         if correct_background:
             drug_vals -= TF_bck_vals[:,:, np.newaxis]
@@ -195,7 +191,7 @@ class raw_data_reader(object):
         if correct_lower_boundary:
             drug_vals = SF.get_boundary_correction(drug_vals, self.std_of_tools)
 
-        return drug_vals, drug_c, T0_vals
+        return drug_vals, drug_c, T0_vals, noize_dispersion
 
     def run_QC(self):
         pass
@@ -262,33 +258,14 @@ class classification_reader(object):
         self.markers = markers
 
 
-def full_round(cell_line, drug, color='black'):
-    TF_OD, concentrations, T0_median = hr.retrieve(cell_line, drug)
-    re_TF_OD, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False)
-    # GI_50 = 10**(-tr.retrieve(cell_line, drug))
-    # TODO: line at the 0 level for the starting concentration
-    # TODO: de-assemble the sigmas and fold growth for repeats
-
-    fold_growth, sigmas, nc_sigmas = SF.get_relative_growth(TF_OD, T0_median, hr.std_of_tools)
-    re_fold_growth, re_sigmas, re_nc_sigmas = SF.get_relative_growth(re_TF_OD, T0_median, hr.std_of_tools)
-
-    # means, errs, unique_concs = PD.bi_plot(fold_growth, concentrations, hr.std_of_tools)
-    means, errs, unique_concs = PD.bi_plot(nc_sigmas, re_nc_sigmas, concentrations,
-                                           1.,
-                                           # GI_50=GI_50,
-                                           color=color,
-                                           legend=cell_line)
-    # means, errs, unique_concs = PD.bi_plot(sigmas, re_sigmas, concentrations, 1., GI_50=GI_50, color=color)
-
-    return means, errs, unique_concs
-
-
-def fragmented_round(cell_line, drug, color='black'):
-    TF_OD, concentrations, T0_median = hr.retrieve(cell_line, drug, assemble_plates=False)
-    re_TF_OD, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False, assemble_plates=False)
+def fragmented_round(cell_line, drug, color='black', standardized=True):
+    TF_OD, concentrations, T0_median, noize_dispersion = hr.retrieve(cell_line, drug, assemble_plates=False)
+    re_TF_OD, _, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False, assemble_plates=False)
     # GI_50 = 10**(-tr.retrieve(cell_line, drug))
 
-    # TODO: inject initial level, and error t_dist ddf 1 estimation
+    # print 'T0_median', T0_median[:, 0]/hr.std_of_tools
+    # print 'noize_dispersion', noize_dispersion[:, 0]/hr.std_of_tools
+    # print 't_dist ddf3 std'
 
     for i in range(0, TF_OD.shape[0]):
         if not np.all(np.isnan(TF_OD[i, :, :])):
@@ -302,23 +279,21 @@ def fragmented_round(cell_line, drug, color='black'):
 
             means, errs, unique_concs = PD.bi_plot(nc_sigmas, re_nc_sigmas, concentrations,
                                                    1.,
+                                                   # filter_level=20,
+                                                   T0=T0_median[i, 0]/hr.std_of_tools,
                                                    color=color,
-                                                   legend=cell_line)
+                                                   legend=cell_line,
+                                                   standardized=standardized)
 
     return ''
 
 
-def compare_to_htert(cell_line, drug, fragmented):
+def compare_to_htert(cell_line, drug, standardized):
     plt.title('%s, %s' % (cell_line, drug))
 
-    if fragmented:
-        fragmented_round('184A1', drug, 'red')
-        fragmented_round('184B5', drug, 'green')
-        fragmented_round(cell_line, drug, 'black')
-    else:
-        full_round('184A1', drug, 'red')
-        full_round('184B5', drug, 'green')
-        full_round(cell_line, drug, 'black')
+    fragmented_round('184A1', drug, 'red', standardized)
+    fragmented_round('184B5', drug, 'green', standardized)
+    fragmented_round(cell_line, drug, 'black', standardized)
 
     plt.gcf().set_size_inches(25, 15, forward=True)
     plt.autoscale(tight=True)
@@ -346,7 +321,7 @@ def perform_iteration(fragmented=False):
             if not cell_line in ['184A1', '184B5']:
                 if [drug_v for drug_v in hr.drug_versions[drug] if not nan(hr.drug_idx[drug_v])]:
                     print cell_line, drug
-                    compare_to_htert(cell_line, drug, fragmented)
+                    compare_to_htert(cell_line, drug, fragmented, True)
                     plt.clf()
 
 
@@ -374,7 +349,20 @@ if __name__ == "__main__":
     hr = raw_data_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
     tr = GI_50_reader('C:\\Users\\Andrei\\Desktop', 'sd05-bis.tsv')
 
-    perform_iteration(True)
+    # TODO: pull out the filtration steps.
+    # TODO: create comparisons that only work in case several variants are available
+    # TODO: draw only if there is anything to draw
+    # TODO: unify the fragmented round and full round approaches by filtration
+
+
+    # perform_iteration(True)
+
+    compare_to_htert('BT474', 'Olomoucine II', True, True)
+    plt.show()
+    # compare_to_htert('HCC38', 'Vinorelbine', True, True)
+    # plt.show()
+
+    # compare_to_htert('184A1', 'GSK2141795', True)
 
     # fragmented_round('MB157' ,'Rapamycin')
     # plt.show()
