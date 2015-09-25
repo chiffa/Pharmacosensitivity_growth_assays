@@ -121,8 +121,7 @@ class raw_data_reader(object):
         return render_dict
 
 
-    def retrieve(self, cell, drug, correct_plates=True, correct_replicates=True,
-                 correct_background=True, correct_lower_boundary=True, correct_C0=False):
+    def retrieve(self, cell, drug, correct_background=True, correct_lower_boundary=True):
 
         drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
 
@@ -135,23 +134,6 @@ class raw_data_reader(object):
             T_container_vals = T_container_vals[:, c_argsort]
             return T_container_vals
 
-        def plate_error_correction(value_set, _drug_n):
-            for i in range(0, value_set.shape[0]):
-                mean_arr = np.nanmean(value_set[i, :, :], axis=1)
-                repress_flag = ''
-
-                if np.max(mean_arr) < 20*self.std_of_tools:
-                    repress_flag += 'too low'
-                if self.cl_drug_replicates[cell_n, _drug_n]>1 and \
-                    np.max(mean_arr) - np.min(mean_arr) < 5*self.std_of_tools:
-                    repress_flag += 'no variation'
-
-                if repress_flag:
-                    print "plate-wide lack of action detected for %s, %s at level %s by %s" % (cell, drug, i, repress_flag)
-                    print mean_arr, (np.max(mean_arr)-np.min(mean_arr))/self.std_of_tools
-                    value_set[i, :, :] = np.nan
-            return value_set
-
         cell_n = self.cell_idx[cell]
         retained_drugs = [drug_v for drug_v in self.drug_versions[drug] if not nan(self.drug_idx[drug_v])]
         if retained_drugs == []:
@@ -160,16 +142,9 @@ class raw_data_reader(object):
         drugs_nos = [self.drug_idx[drug_v] for drug_v in retained_drugs]
         drug_vals = [self.storage[cell_n, drug_n].copy() for drug_n in drugs_nos]
 
-        if correct_plates:
-            drug_vals = [plate_error_correction(val, drug_n) for val, drug_n in zip(drug_vals, drugs_nos)]
-
-        if correct_replicates:
-            drug_vals = [np.apply_along_axis(SF.clean_tri_replicates, 2, value, self.std_of_tools) for value in drug_vals]
-
-        if correct_C0:
-            drug_vals = [SF.C0_correction(value)*100*self.std_of_tools for value in drug_vals]
-
         drug_c = [drug_v[1]*drug_c_array for drug_v in retained_drugs]
+        anchor = np.min(np.array([drug_v[1] for drug_v in retained_drugs]))
+        anchor = anchor/2.**10
         drug_vals = SF.block_fusion(drug_vals)
 
         drug_c = np.hstack(drug_c)
@@ -191,7 +166,11 @@ class raw_data_reader(object):
         if correct_lower_boundary:
             drug_vals = SF.get_boundary_correction(drug_vals, self.std_of_tools)
 
-        return drug_vals, drug_c, T0_vals, noize_dispersion
+        print 'drug_vals', drug_vals
+        print 'drug_c', drug_c
+        print 'T0_vals', T0_vals
+
+        return drug_vals, drug_c, T0_vals, noize_dispersion, anchor
 
     def run_QC(self):
         pass
@@ -252,38 +231,33 @@ class classification_reader(object):
 
         cell_idx_rv = dict([(value, key) for key, value in cell_idx.iteritems()])
 
-        self.cassificant_index = cell_idx                # celline to index
-        self.header = header                    # drug to index
-        self.classificant_index_rv = cell_idx_rv          # index to cell_line
+        self.cassificant_index = cell_idx                   # celline to index
+        self.header = header                                # drug to index
+        self.classificant_index_rv = cell_idx_rv            # index to cell_line
         self.markers = markers
 
 
 def fragmented_round(cell_line, drug, color='black', standardized=True):
-    TF_OD, concentrations, T0_median, noize_dispersion = hr.retrieve(cell_line, drug, assemble_plates=False)
-    re_TF_OD, _, _, _ = hr.retrieve(cell_line, drug, correct_plates=False, correct_replicates=False, assemble_plates=False)
-    # GI_50 = 10**(-tr.retrieve(cell_line, drug))
+    TF_OD, concentrations, T0_median, noize_dispersion, anchor = hr.retrieve(cell_line, drug)
+    clean_mask = SF.clean_nans(TF_OD)
+    TF_OD, T0_median = (TF_OD[clean_mask, :, :], T0_median[clean_mask, :])
 
-    # print 'T0_median', T0_median[:, 0]/hr.std_of_tools
-    # print 'noize_dispersion', noize_dispersion[:, 0]/hr.std_of_tools
-    # print 't_dist ddf3 std'
+    TF_corrected, means_arr, errs_arr, unique_concs_stack = SF.correct_plates(TF_OD, concentrations, hr.std_of_tools)
 
-    for i in range(0, TF_OD.shape[0]):
-        if not np.all(np.isnan(TF_OD[i, :, :])):
-            fold_growth, sigmas, nc_sigmas = SF.get_relative_growth(TF_OD[i, :, :][np.newaxis, :, :],
-                                                                    T0_median[i, :][np.newaxis, :],
-                                                                    hr.std_of_tools)
+    # PD.raw_plot(TF_corrected, TF_OD, concentrations, hr.std_of_tools, 'black')
+    # PD.vector_summary_plot(means_arr, errs_arr, unique_concs_stack, anchor)
+    # plt.show()
 
-            re_fold_growth, re_sigmas, re_nc_sigmas = SF.get_relative_growth(re_TF_OD[i, :, :][np.newaxis, :, :],
-                                                                             T0_median[i, :][np.newaxis, :],
-                                                                             hr.std_of_tools)
+    # works until here
 
-            means, errs, unique_concs = PD.bi_plot(nc_sigmas, re_nc_sigmas, concentrations,
-                                                   1.,
-                                                   # filter_level=20,
-                                                   T0=T0_median[i, 0]/hr.std_of_tools,
-                                                   color=color,
-                                                   legend=cell_line,
-                                                   standardized=standardized)
+    clean_mask = SF.clean_nans(TF_corrected)
+    TF_corrected, T0_corrected = (TF_corrected[clean_mask, :, :], T0_median[clean_mask, :])
+    norm_plate, norm_means, norm_errs, norm_std_of_tools = SF.normalize(TF_corrected, means_arr,
+                                                                        errs_arr, hr.std_of_tools, T0_median[:, 0])
+    # TODO: we can plot the means, corrected and the initial ODs from here
+    means, errs, unique_concs = SF.combine(norm_plate, concentrations, np.max(norm_std_of_tools))
+    # TODO: we can plot the means, corrected and the initial ODs from here
+
 
     return ''
 
@@ -311,7 +285,7 @@ def compare_to_htert(cell_line, drug, standardized):
     plt.savefig('../analysis_runs/by_cell_line/%s/%s.png'%(cell_line, drug))
 
 
-def perform_iteration(fragmented=False):
+def perform_iteration():
 
     def nan(_drug_n):
             return np.all(np.isnan(hr.storage[cell_n, _drug_n]))
@@ -320,8 +294,7 @@ def perform_iteration(fragmented=False):
         for cell_line, cell_n in hr.cell_idx.iteritems():
             if not cell_line in ['184A1', '184B5']:
                 if [drug_v for drug_v in hr.drug_versions[drug] if not nan(hr.drug_idx[drug_v])]:
-                    print cell_line, drug
-                    compare_to_htert(cell_line, drug, fragmented, True)
+                    compare_to_htert(cell_line, drug, True)
                     plt.clf()
 
 
@@ -349,16 +322,15 @@ if __name__ == "__main__":
     hr = raw_data_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
     tr = GI_50_reader('C:\\Users\\Andrei\\Desktop', 'sd05-bis.tsv')
 
-    # TODO: pull out the filtration steps.
     # TODO: create comparisons that only work in case several variants are available
     # TODO: draw only if there is anything to draw
-    # TODO: unify the fragmented round and full round approaches by filtration
 
+    # perform_iteration()
 
-    # perform_iteration(True)
+    fragmented_round('MB157' ,'Rapamycin')
 
-    compare_to_htert('BT474', 'Olomoucine II', True, True)
-    plt.show()
+    # compare_to_htert('BT474', 'Olomoucine II', True)
+    # plt.show()
     # compare_to_htert('HCC38', 'Vinorelbine', True, True)
     # plt.show()
 

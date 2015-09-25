@@ -98,15 +98,16 @@ def clean_tri_replicates(points, std_of_tools):
     :param points:
     :return:
     """
-    if all(np.isnan(points)):
+    if all(np.isnan(points)):  # early termination if all points are nan
         return points
+
     arr_of_interest = pdist(points[:, np.newaxis])
     _min, _max = (np.min(arr_of_interest), np.max(arr_of_interest))
     containment = t.interval(0.95, 1, scale=_min/2)[1]
 
     if _max > containment:
         outlier = 2 - np.argmin(arr_of_interest)
-        msk  = np.array([True, True, True])
+        msk = np.array([True, True, True])
         msk[outlier] = False
         _mean, _std = (np.mean(points[msk]), np.std(points[msk]))
         containment_2 = t.interval(0.95, 1, loc=_mean, scale=np.sqrt(_std**2+std_of_tools**2))
@@ -179,8 +180,110 @@ def estimate_differences(mean_diff_array):
     return np.nanstd(mean_diff_array, axis=0, ddof=1)
 
 
-def correct_plates(plate):
-    return plate
+def correct_plates(plate_stack, concentrations, std_of_tools,
+                   replicate_cleaning=True, filter_level=np.nan,
+                   info_threshold=3, bang_threshold=20):
+    """
+    Performs the correction of the plates status
+
+    :param plate:
+    :param concentrations:
+    :param std_of_tools:
+    :return:
+    """
+    re_plate_stack =  []
+    means_stack = []
+    errs_stack = []
+    unique_concs_stack = []
+    
+    ghost = np.empty_like(plate_stack[0, :, :])
+    ghost.fill(np.nan)
+
+        # removal of outliers in triplicates have to be performed first because they affect stds
+    if replicate_cleaning:
+        np.apply_along_axis(clean_tri_replicates, 2, plate_stack, std_of_tools)
+
+    for i in range(0, plate_stack.shape[0]):
+        plate = plate_stack[i, :, :][np.newaxis, :, :]
+
+        # the plates are not assembled yet.
+        # TODO: problem: this collapses the means
+        means, errs, stds, freedom_degs, unique_concs = compute_stats(plate, concentrations, std_of_tools)
+
+        flat_ghost = np.empty_like(means)
+        flat_ghost.fill(np.nan)
+
+        msk = np.logical_not(np.isnan(means))
+        # in this specific case, nan removal is required for info calculation to be properly implemented
+
+        # if not np.isnan(filter_level):
+        #   msk = np.logical_and(msk, errs > filter_level)
+        # # this was desabled because the masking breaks the indexing routines further down the road
+
+        re_means = means[msk]
+        re_stds = stds[msk]
+        re_unique_concs = unique_concs[msk]
+
+        for i, conc in enumerate(concentrations): # this clears sets that were filtered out due to excessive noise.
+            if conc not in unique_concs:
+                plate[:, i, :] = np.nan
+
+        info = calculate_information(re_means, re_stds)
+        bang = np.max(re_means)/std_of_tools
+
+        unique_concs_stack.append(unique_concs)
+        if info > info_threshold and bang > bang_threshold:
+            re_plate_stack.append(plate[0, :, :])
+            means_stack.append(means)
+            errs_stack.append(errs)
+
+        else:
+            re_plate_stack.append(ghost)
+            means_stack.append(flat_ghost)
+            errs_stack.append(errs)
+
+    # this fragment fails in case we try to filter out additional points from the plot. Hence the off switch above
+    re_plate_stack = np.array(re_plate_stack)
+    means_stack = np.array(means_stack)
+    errs_stack = np.array(errs_stack)
+    unique_concs_stack = np.array(unique_concs_stack)
+
+    return re_plate_stack, means_stack, errs_stack, unique_concs_stack
+
+
+def clean_nans(stake_of_interest, dims=3):
+    mask = []
+    for i in range(0, stake_of_interest.shape[0]):
+        if dims == 3:
+            mask.append(np.all(np.isnan(stake_of_interest[i, :, :])))
+        if dims == 2:
+            mask.append(np.all(np.isnan(stake_of_interest[i, :])))
+
+    mask = np.logical_not(np.array(mask))
+
+    return mask
+
+
+def normalize(plate_stack, means_stack, errs_stack, std_of_tools, normalization_vector = None):
+    if normalization_vector is None:
+        normalization_vector = []
+        for i in range(0, means_stack[0]):
+            normalization_vector.append(means_stack[i, np.logical_not(np.isnan(means_stack[i, :]))][0])  # should be normalization to 0
+        normalization_vector = np.array(normalization_vector)
+
+    plate_stack /= normalization_vector[:, np.newaxis, np.newaxis]
+    means_stack /= normalization_vector[:, np.newaxis]
+    errs_stack /= normalization_vector[:, np.newaxis]
+    std_of_tools = std_of_tools / normalization_vector
+
+    return  plate_stack, means_stack, errs_stack, std_of_tools
+
+
+def combine(plate_stack, concentrations, std_of_tools_vector):
+    std_of_tools = np.max(std_of_tools_vector)
+    means, errs, stds, freedom_degs, unique_concs = compute_stats(plate_stack, concentrations, std_of_tools)
+
+    return means, errs, unique_concs
 
 
 def logistic_regression(TF, T0, concentrations, background_std):

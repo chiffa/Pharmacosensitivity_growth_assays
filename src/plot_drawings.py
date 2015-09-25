@@ -67,6 +67,7 @@ def summary_plot(means, mean_err, concentrations, anchor=None, color='black', le
     if anchor is None:
         concentrations[0] = concentrations[1]/4
     else:
+        print anchor
         concentrations[0] = anchor
     plt.errorbar(concentrations, means, yerr=mean_err, color=color, label=legend)
     ymax = means + mean_err
@@ -74,48 +75,14 @@ def summary_plot(means, mean_err, concentrations, anchor=None, color='black', le
     plt.fill_between(concentrations, ymax, ymin, facecolor=color, alpha=0.25)
 
 
-def bi_plot(raw_points, full_raw_points, concentrations, std_of_tools, filter_level=None,
-            GI_50=np.nan, T0=np.nan, color='black', legend='', standardized=False):
+def vector_summary_plot(means_array, error_array, concentrations_array, anchor, legend_array=None, color='black'):
+    if legend_array is None:
+        legend_array = np.zeros_like(means_array[:, 0])
 
-    rp_noise = stats.norm.interval(.95, scale=std_of_tools)[1]
-
-    means, errs, stds, freedom_degs, unique_concs = SF.compute_stats(raw_points, concentrations, std_of_tools)
-    msk = np.logical_not(np.isnan(means))
-
-    if filter_level is not None:
-        msk = np.logical_and(msk, errs < filter_level*std_of_tools)
-
-    means = means[msk]
-    errs = errs[msk]
-    stds = errs[stds]
-    anchor = unique_concs[1]/4
-    unique_concs = unique_concs[msk]
-    for i, conc in enumerate(concentrations):
-        if conc not in unique_concs:
-            raw_points[:, i, :] = np.nan
-
-    # TODO: this part, along with computation of retention needs to be factored out into supporting function
-    info = SF.calculate_information(means, stds)
-
-    if standardized:
-        if np.isnan(T0):
-            c_factor = means[0].copy()
-        else:
-            c_factor = T0
-        raw_points /= c_factor
-        full_raw_points /= c_factor
-        rp_noise /=c_factor
-        means /= c_factor
-        errs /= c_factor
-
-    if info > 3:
-        raw_plot(raw_points, full_raw_points, concentrations, rp_noise, color)
-        summary_plot(means, errs, unique_concs, anchor, color, legend='%s: %s' %(legend, info))
-        if GI_50 != np.nan:
-            plt.axvline(GI_50, color=color)
-        return means, errs, unique_concs
-    else:
-        return np.empty_like(means), np.empty_like(errs), unique_concs
+    for i in range(0, means_array.shape[0]):
+        nanmask = np.logical_not(np.isnan(means_array[i, :]))
+        if not np.all(np.logical_not(nanmask)):
+            summary_plot(means_array[i, nanmask], error_array[i, nanmask], concentrations_array[i, nanmask], anchor, color, legend_array[i])
 
 
 def pretty_gradual_plot(data, concentrations, strain_name_map, drug_name, blank_line=200):
