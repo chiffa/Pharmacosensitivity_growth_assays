@@ -264,7 +264,13 @@ def clean_nans(stake_of_interest, dims=3):
     return mask
 
 
+def retrieve_normalization_factor(T0_median_array):
+    redux_function = lambda x: rm_nans(x)[0]
+    retour = np.apply_along_axis(redux_function, 1, T0_median_array)
+    return retour
+
 def normalize(plate_stack, means_stack, errs_stack, std_of_tools, normalization_vector = None):
+
     if normalization_vector is None:
         normalization_vector = []
         for i in range(0, means_stack[0]):
@@ -276,7 +282,7 @@ def normalize(plate_stack, means_stack, errs_stack, std_of_tools, normalization_
     errs_stack /= normalization_vector[:, np.newaxis]
     std_of_tools = std_of_tools / normalization_vector
 
-    return  plate_stack, means_stack, errs_stack, std_of_tools
+    return plate_stack, means_stack, errs_stack, std_of_tools
 
 
 def combine(plate_stack, concentrations, std_of_tools_vector):

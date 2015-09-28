@@ -34,7 +34,6 @@ def raw_plot(values, full_values, concentrations, noise_level, color):
     m_j = values.shape[2]
 
     ax = plt.subplot(111)
-
     ax.set_xscale('log')
 
     msk = concentrations == 0.0
@@ -63,16 +62,17 @@ def raw_plot(values, full_values, concentrations, noise_level, color):
 
 
 
-def summary_plot(means, mean_err, concentrations, anchor=None, color='black', legend=''):
-    if anchor is None:
-        concentrations[0] = concentrations[1]/4
-    else:
-        print anchor
+def summary_plot(means, mean_err, concentrations, anchor, color='black', legend=''):
+    ax = plt.subplot(111)
+    ax.set_xscale('log')
+
+    nanmask = np.logical_not(np.isnan(means))
+    if not np.all(np.logical_not(nanmask)):
         concentrations[0] = anchor
-    plt.errorbar(concentrations, means, yerr=mean_err, color=color, label=legend)
-    ymax = means + mean_err
-    ymin = means - mean_err
-    plt.fill_between(concentrations, ymax, ymin, facecolor=color, alpha=0.25)
+        plt.errorbar(concentrations[nanmask], means[nanmask], yerr=mean_err[nanmask], color=color, label=legend)
+        ymax = means[nanmask] + mean_err[nanmask]
+        ymin = means[nanmask] - mean_err[nanmask]
+        plt.fill_between(concentrations[nanmask], ymax, ymin, facecolor=color, alpha=0.25)
 
 
 def vector_summary_plot(means_array, error_array, concentrations_array, anchor, legend_array=None, color='black'):

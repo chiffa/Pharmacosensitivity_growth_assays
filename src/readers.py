@@ -15,6 +15,7 @@ from matplotlib import pyplot as plt
 from StringIO import StringIO
 from slugify import slugify
 from scipy.linalg import block_diag
+from multiprocessing import Process
 
 class raw_data_reader(object):
 
@@ -166,9 +167,9 @@ class raw_data_reader(object):
         if correct_lower_boundary:
             drug_vals = SF.get_boundary_correction(drug_vals, self.std_of_tools)
 
-        print 'drug_vals', drug_vals
-        print 'drug_c', drug_c
-        print 'T0_vals', T0_vals
+        # print 'drug_vals', drug_vals
+        # print 'drug_c', drug_c
+        # print 'T0_vals', T0_vals
 
         return drug_vals, drug_c, T0_vals, noize_dispersion, anchor
 
@@ -237,37 +238,68 @@ class classification_reader(object):
         self.markers = markers
 
 
-def fragmented_round(cell_line, drug, color='black', standardized=True):
+def fragmented_round(cell_line, drug, color='black', plot_type = 1):
+    plot_touched = False
+
     TF_OD, concentrations, T0_median, noize_dispersion, anchor = hr.retrieve(cell_line, drug)
     clean_mask = SF.clean_nans(TF_OD)
-    TF_OD, T0_median = (TF_OD[clean_mask, :, :], T0_median[clean_mask, :])
 
+    if not np.any(clean_mask):
+        return plot_touched
+
+    TF_OD, T0_median = (TF_OD[clean_mask, :, :], T0_median[clean_mask, :])
     TF_corrected, means_arr, errs_arr, unique_concs_stack = SF.correct_plates(TF_OD, concentrations, hr.std_of_tools)
 
-    # PD.raw_plot(TF_corrected, TF_OD, concentrations, hr.std_of_tools, 'black')
-    # PD.vector_summary_plot(means_arr, errs_arr, unique_concs_stack, anchor)
-    # plt.show()
-
-    # works until here
+    if plot_type == 1:
+        plot_touched = True
+        PD.raw_plot(TF_corrected, TF_OD, concentrations, hr.std_of_tools, 'black')
+        PD.vector_summary_plot(means_arr, errs_arr, unique_concs_stack, anchor)
+        # plt.show()
 
     clean_mask = SF.clean_nans(TF_corrected)
+    if not np.any(clean_mask):
+        return plot_touched
+
     TF_corrected, T0_corrected = (TF_corrected[clean_mask, :, :], T0_median[clean_mask, :])
+    means_arr, errs_arr = (means_arr[clean_mask, :], errs_arr[clean_mask, :])
+
+    norm_factor = SF.retrieve_normalization_factor(T0_corrected)
     norm_plate, norm_means, norm_errs, norm_std_of_tools = SF.normalize(TF_corrected, means_arr,
-                                                                        errs_arr, hr.std_of_tools, T0_median[:, 0])
-    # TODO: we can plot the means, corrected and the initial ODs from here
+                                                                        errs_arr, hr.std_of_tools,
+                                                                        norm_factor)
+
+    if plot_type == 2:
+        plot_touched = True
+        PD.vector_summary_plot(norm_means, norm_errs, unique_concs_stack, anchor)
+        # plt.show()
+
     means, errs, unique_concs = SF.combine(norm_plate, concentrations, np.max(norm_std_of_tools))
-    # TODO: we can plot the means, corrected and the initial ODs from here
+
+    if plot_type==3:
+        plot_touched = True
+        PD.summary_plot(means, errs, unique_concs, anchor)
+        # plt.show()
+
+    return plot_touched
 
 
-    return ''
-
-
-def compare_to_htert(cell_line, drug, standardized):
+def compare_to_htert(cell_line, drug, standardized, plot_type=1):
     plt.title('%s, %s' % (cell_line, drug))
 
-    fragmented_round('184A1', drug, 'red', standardized)
-    fragmented_round('184B5', drug, 'green', standardized)
-    fragmented_round(cell_line, drug, 'black', standardized)
+    print '{0:15}'.format(cell_line),
+    print '{0:20}'.format(drug),
+    print '\t',
+
+    rt = fragmented_round('184A1', drug, 'red', plot_type)
+    print 'rt',
+    gt = fragmented_round('184B5', drug, 'green', plot_type)
+    print 'gt',
+    bt = fragmented_round(cell_line, drug, 'black', plot_type)
+    print 'bt',
+
+    if not bt:
+        print '-'
+        return ''
 
     plt.gcf().set_size_inches(25, 15, forward=True)
     plt.autoscale(tight=True)
@@ -276,16 +308,23 @@ def compare_to_htert(cell_line, drug, standardized):
     cell_line = slugify(cell_line)
     drug = slugify(drug)
 
-    plt.savefig('../analysis_runs/vrac/%s - %s.png'%(cell_line, drug) )
 
-    SF.safe_dir_create('../analysis_runs/by_drug/%s/'%drug)
-    plt.savefig('../analysis_runs/by_drug/%s/%s.png'%(drug, cell_line))
+    type_map = ['_', 'raw', 'normalized', 'collapsed']
 
-    SF.safe_dir_create('../analysis_runs/by_cell_line/%s/'%cell_line)
-    plt.savefig('../analysis_runs/by_cell_line/%s/%s.png'%(cell_line, drug))
+    SF.safe_dir_create('../analysis_runs/%s/vrac/'%type_map[plot_type])
+    plt.savefig('../analysis_runs/%s/vrac/%s - %s.png'%(type_map[plot_type], cell_line, drug) )
+
+    SF.safe_dir_create('../analysis_runs/%s/by_drug/%s/'%(type_map[plot_type], drug))
+    plt.savefig('../analysis_runs/%s/by_drug/%s/%s.png'%(type_map[plot_type], drug, cell_line))
+
+    SF.safe_dir_create('../analysis_runs/%s/by_cell_line/%s/'%(type_map[plot_type], cell_line))
+    plt.savefig('../analysis_runs/%s/by_cell_line/%s/%s.png'%(type_map[plot_type], cell_line, drug))
+
+    print '+'
+    return ''
 
 
-def perform_iteration():
+def loop(plot_type=1):
 
     def nan(_drug_n):
             return np.all(np.isnan(hr.storage[cell_n, _drug_n]))
@@ -294,7 +333,7 @@ def perform_iteration():
         for cell_line, cell_n in hr.cell_idx.iteritems():
             if not cell_line in ['184A1', '184B5']:
                 if [drug_v for drug_v in hr.drug_versions[drug] if not nan(hr.drug_idx[drug_v])]:
-                    compare_to_htert(cell_line, drug, True)
+                    compare_to_htert(cell_line, drug, True, plot_type)
                     plt.clf()
 
 
@@ -325,9 +364,9 @@ if __name__ == "__main__":
     # TODO: create comparisons that only work in case several variants are available
     # TODO: draw only if there is anything to draw
 
-    # perform_iteration()
+    loop(3)
 
-    fragmented_round('MB157' ,'Rapamycin')
+    # fragmented_round('184A1' ,'GSK2141795', plot_type=3)
 
     # compare_to_htert('BT474', 'Olomoucine II', True)
     # plt.show()
