@@ -3,7 +3,8 @@ __author__ = 'Andrei'
 import numpy as np
 from chiffatools.Linalg_routines import rm_nans
 from scipy.stats import t, norm
-from scipy.spatial.distance import pdist
+from scipy.spatial.distance import pdist, squareform
+from matplotlib import pyplot as plt
 import os
 
 drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
@@ -125,6 +126,26 @@ def C0_correction(value_set):
 
 
 def compute_stats(values, concentrations, background_std, clean=True):
+
+    def preprocess_concentrations():
+
+        u_concentrations = np.unique(concentrations)[1:]
+
+        re_concentrations = np.log(u_concentrations)
+        _5_p = np.log(1.05)
+        backbone = squareform(pdist(re_concentrations[:, np.newaxis]))
+
+        msk = np.array((backbone < _5_p).nonzero()).T
+        collapse = []
+        for i, j in msk.tolist():
+            if i > j:
+                collapse.append((u_concentrations[i], u_concentrations[j]))
+
+        for c1, c2 in collapse:
+            concentrations[concentrations == c2] = c1
+
+
+    preprocess_concentrations()
 
     unique_values = np.unique(concentrations)
 
@@ -269,13 +290,22 @@ def retrieve_normalization_factor(T0_median_array):
     retour = np.apply_along_axis(redux_function, 1, T0_median_array)
     return retour
 
-def normalize(plate_stack, means_stack, errs_stack, std_of_tools, normalization_vector = None):
+
+def type_map(xy):
+    x, y = tuple(str(xy))
+    x, y = (int(x), int(y))
+    x_str = ['_', 'raw', 'normalized', 'collapsed'][x]
+    y_str = ['plate c0-', 'plate t0-'][y]
+    if x < 2:
+        return x_str
+    if x > 1:
+        return y_str+x_str
+
+
+def normalize(plate_stack, means_stack, errs_stack, std_of_tools, normalization_vector):
 
     if normalization_vector is None:
-        normalization_vector = []
-        for i in range(0, means_stack[0]):
-            normalization_vector.append(means_stack[i, np.logical_not(np.isnan(means_stack[i, :]))][0])  # should be normalization to 0
-        normalization_vector = np.array(normalization_vector)
+        raise Exception('Normalization vector supplied is empty. Make sure your your parameters are of form xy, x=1/2/3, y=0/1')
 
     plate_stack /= normalization_vector[:, np.newaxis, np.newaxis]
     means_stack /= normalization_vector[:, np.newaxis]

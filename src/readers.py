@@ -238,11 +238,20 @@ class classification_reader(object):
         self.markers = markers
 
 
-def fragmented_round(cell_line, drug, color='black', plot_type = 1):
+def fragmented_round(cell_line, drug, color='black', plot_type = 10, injected_anchor=None):
+
+    render_type = int(str(plot_type)[0])
+    normalization_type = int(str(plot_type)[1])
+
     plot_touched = False
 
     TF_OD, concentrations, T0_median, noize_dispersion, anchor = hr.retrieve(cell_line, drug)
+    if injected_anchor is not None:
+        anchor = injected_anchor
     clean_mask = SF.clean_nans(TF_OD)
+
+    # TODO: proper anchor management. Problem: we need to know the anchors of all the three elements before we are
+    # really able to do any drawing.
 
     if not np.any(clean_mask):
         return plot_touched
@@ -250,34 +259,42 @@ def fragmented_round(cell_line, drug, color='black', plot_type = 1):
     TF_OD, T0_median = (TF_OD[clean_mask, :, :], T0_median[clean_mask, :])
     TF_corrected, means_arr, errs_arr, unique_concs_stack = SF.correct_plates(TF_OD, concentrations, hr.std_of_tools)
 
-    if plot_type == 1:
+    if render_type == 1:
         plot_touched = True
-        PD.raw_plot(TF_corrected, TF_OD, concentrations, hr.std_of_tools, 'black')
-        PD.vector_summary_plot(means_arr, errs_arr, unique_concs_stack, anchor)
+        PD.raw_plot(TF_corrected, TF_OD, concentrations, hr.std_of_tools, color=color)
+        PD.vector_summary_plot(means_arr, errs_arr, unique_concs_stack, anchor, color=color)
         # plt.show()
 
     clean_mask = SF.clean_nans(TF_corrected)
+
     if not np.any(clean_mask):
         return plot_touched
 
     TF_corrected, T0_corrected = (TF_corrected[clean_mask, :, :], T0_median[clean_mask, :])
     means_arr, errs_arr = (means_arr[clean_mask, :], errs_arr[clean_mask, :])
 
-    norm_factor = SF.retrieve_normalization_factor(T0_corrected)
+    norm_factor = None
+
+    if normalization_type == 0:
+        norm_factor = SF.retrieve_normalization_factor(means_arr)
+
+    if normalization_type == 1:
+        norm_factor = SF.retrieve_normalization_factor(T0_corrected)
+
     norm_plate, norm_means, norm_errs, norm_std_of_tools = SF.normalize(TF_corrected, means_arr,
                                                                         errs_arr, hr.std_of_tools,
                                                                         norm_factor)
 
-    if plot_type == 2:
+    if render_type == 2:
         plot_touched = True
-        PD.vector_summary_plot(norm_means, norm_errs, unique_concs_stack, anchor)
+        PD.vector_summary_plot(norm_means, norm_errs, unique_concs_stack, anchor, color=color)
         # plt.show()
 
     means, errs, unique_concs = SF.combine(norm_plate, concentrations, np.max(norm_std_of_tools))
 
-    if plot_type==3:
+    if render_type == 3:
         plot_touched = True
-        PD.summary_plot(means, errs, unique_concs, anchor)
+        PD.summary_plot(means, errs, unique_concs, anchor, color = color)
         # plt.show()
 
     return plot_touched
@@ -290,11 +307,17 @@ def compare_to_htert(cell_line, drug, standardized, plot_type=1):
     print '{0:20}'.format(drug),
     print '\t',
 
-    rt = fragmented_round('184A1', drug, 'red', plot_type)
+    _, _, _, _, r_anchor = hr.retrieve('184A1', drug)
+    _, _, _, _, g_anchor = hr.retrieve('184A1', drug)
+    _, _, _, _, b_anchor = hr.retrieve('184A1', drug)
+
+    anchor = np.nanmin(np.array([r_anchor, g_anchor, b_anchor]))
+
+    rt = fragmented_round('184A1', drug, 'red', plot_type, anchor)
     print 'rt',
-    gt = fragmented_round('184B5', drug, 'green', plot_type)
+    gt = fragmented_round('184B5', drug, 'green', plot_type, anchor)
     print 'gt',
-    bt = fragmented_round(cell_line, drug, 'black', plot_type)
+    bt = fragmented_round(cell_line, drug, 'black', plot_type, anchor)
     print 'bt',
 
     if not bt:
@@ -309,25 +332,25 @@ def compare_to_htert(cell_line, drug, standardized, plot_type=1):
     drug = slugify(drug)
 
 
-    type_map = ['_', 'raw', 'normalized', 'collapsed']
+    SF.safe_dir_create('../analysis_runs/%s/vrac/'%SF.type_map(plot_type))
+    plt.savefig('../analysis_runs/%s/vrac/%s - %s.png'%(SF.type_map(plot_type), cell_line, drug) )
 
-    SF.safe_dir_create('../analysis_runs/%s/vrac/'%type_map[plot_type])
-    plt.savefig('../analysis_runs/%s/vrac/%s - %s.png'%(type_map[plot_type], cell_line, drug) )
+    SF.safe_dir_create('../analysis_runs/%s/by_drug/%s/'%(SF.type_map(plot_type), drug))
+    plt.savefig('../analysis_runs/%s/by_drug/%s/%s.png'%(SF.type_map(plot_type), drug, cell_line))
 
-    SF.safe_dir_create('../analysis_runs/%s/by_drug/%s/'%(type_map[plot_type], drug))
-    plt.savefig('../analysis_runs/%s/by_drug/%s/%s.png'%(type_map[plot_type], drug, cell_line))
-
-    SF.safe_dir_create('../analysis_runs/%s/by_cell_line/%s/'%(type_map[plot_type], cell_line))
-    plt.savefig('../analysis_runs/%s/by_cell_line/%s/%s.png'%(type_map[plot_type], cell_line, drug))
+    SF.safe_dir_create('../analysis_runs/%s/by_cell_line/%s/'%(SF.type_map(plot_type), cell_line))
+    plt.savefig('../analysis_runs/%s/by_cell_line/%s/%s.png'%(SF.type_map(plot_type), cell_line, drug))
 
     print '+'
     return ''
 
 
-def loop(plot_type=1):
+def loop(plot_type=10):
 
     def nan(_drug_n):
             return np.all(np.isnan(hr.storage[cell_n, _drug_n]))
+
+    print 'starting loop with the following parameters: %s' % (plot_type)
 
     for drug in hr.drug_versions.keys():
         for cell_line, cell_n in hr.cell_idx.iteritems():
@@ -335,21 +358,6 @@ def loop(plot_type=1):
                 if [drug_v for drug_v in hr.drug_versions[drug] if not nan(hr.drug_idx[drug_v])]:
                     compare_to_htert(cell_line, drug, True, plot_type)
                     plt.clf()
-
-
-    # cr = classification_reader('C:\\Users\\Andrei\\Desktop', 'sd01-bis.tsv')
-    # dr = classification_reader('C:\\Users\\Andrei\\Desktop', 's5.tsv')
-
-    # TF_OD, concentrations, T0_bck, TF_bck, T0_median = hr.retrieve('HCC202', 'Rapamycin')
-    # GI_50 = 10**(-tr.retrieve('HCC202', 'Rapamycin'))
-
-    # QC.check_reader_consistency([hr.cell_idx.keys(), tr.cell_idx.keys(), cr.cassificant_index.keys()])
-    # QC.check_reader_consistency([hr.drug_versions.keys(), tr.drug_idx.keys(), dr.cassificant_index.keys()])
-
-
-    # compare_to_htert('AU565', '17-AAG', fragmented)
-
-    # plt.show()
 
 
 def test_GI_50_reader():
@@ -361,22 +369,7 @@ if __name__ == "__main__":
     hr = raw_data_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
     tr = GI_50_reader('C:\\Users\\Andrei\\Desktop', 'sd05-bis.tsv')
 
-    # TODO: create comparisons that only work in case several variants are available
-    # TODO: draw only if there is anything to draw
+    print fragmented_round('600MPE', 'GSK1838705', plot_type=30)
+    plt.show()
 
-    loop(3)
-
-    # fragmented_round('184A1' ,'GSK2141795', plot_type=3)
-
-    # compare_to_htert('BT474', 'Olomoucine II', True)
-    # plt.show()
-    # compare_to_htert('HCC38', 'Vinorelbine', True, True)
-    # plt.show()
-
-    # compare_to_htert('184A1', 'GSK2141795', True)
-
-    # fragmented_round('MB157' ,'Rapamycin')
-    # plt.show()
-
-    # test_raw_data_reader()
-    # test_GI_50_reader()
+    # loop(20)
