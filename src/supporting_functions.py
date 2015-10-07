@@ -228,7 +228,6 @@ def correct_plates(plate_stack, concentrations, std_of_tools,
         plate = plate_stack[i, :, :][np.newaxis, :, :]
 
         # the plates are not assembled yet.
-        # TODO: problem: this collapses the means
         means, errs, stds, freedom_degs, unique_concs = compute_stats(plate, concentrations, std_of_tools)
 
         flat_ghost = np.empty_like(means)

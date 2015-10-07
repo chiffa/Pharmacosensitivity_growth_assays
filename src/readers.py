@@ -16,6 +16,7 @@ from StringIO import StringIO
 from slugify import slugify
 from scipy.linalg import block_diag
 from multiprocessing import Process
+from pickle import dump
 
 class raw_data_reader(object):
 
@@ -250,11 +251,8 @@ def fragmented_round(cell_line, drug, color='black', plot_type = 10, injected_an
         anchor = injected_anchor
     clean_mask = SF.clean_nans(TF_OD)
 
-    # TODO: proper anchor management. Problem: we need to know the anchors of all the three elements before we are
-    # really able to do any drawing.
-
     if not np.any(clean_mask):
-        return plot_touched
+        return plot_touched, (None, None, None), (None, None, None, None)
 
     TF_OD, T0_median = (TF_OD[clean_mask, :, :], T0_median[clean_mask, :])
     TF_corrected, means_arr, errs_arr, unique_concs_stack = SF.correct_plates(TF_OD, concentrations, hr.std_of_tools)
@@ -268,7 +266,7 @@ def fragmented_round(cell_line, drug, color='black', plot_type = 10, injected_an
     clean_mask = SF.clean_nans(TF_corrected)
 
     if not np.any(clean_mask):
-        return plot_touched
+        return plot_touched, (None, None, None), (None, None, None, None)
 
     TF_corrected, T0_corrected = (TF_corrected[clean_mask, :, :], T0_median[clean_mask, :])
     means_arr, errs_arr = (means_arr[clean_mask, :], errs_arr[clean_mask, :])
@@ -297,7 +295,7 @@ def fragmented_round(cell_line, drug, color='black', plot_type = 10, injected_an
         PD.summary_plot(means, errs, unique_concs, anchor, color = color)
         # plt.show()
 
-    return plot_touched
+    return plot_touched, (means, errs, unique_concs), (means_arr, errs_arr, T0_corrected, unique_concs_stack)
 
 
 def compare_to_htert(cell_line, drug, standardized, plot_type=1):
@@ -313,11 +311,11 @@ def compare_to_htert(cell_line, drug, standardized, plot_type=1):
 
     anchor = np.nanmin(np.array([r_anchor, g_anchor, b_anchor]))
 
-    rt = fragmented_round('184A1', drug, 'red', plot_type, anchor)
+    rt, _, _ = fragmented_round('184A1', drug, 'red', plot_type, anchor)
     print 'rt',
-    gt = fragmented_round('184B5', drug, 'green', plot_type, anchor)
+    gt, _, _ = fragmented_round('184B5', drug, 'green', plot_type, anchor)
     print 'gt',
-    bt = fragmented_round(cell_line, drug, 'black', plot_type, anchor)
+    bt, _, _ = fragmented_round(cell_line, drug, 'black', plot_type, anchor)
     print 'bt',
 
     if not bt:
@@ -345,12 +343,12 @@ def compare_to_htert(cell_line, drug, standardized, plot_type=1):
     return ''
 
 
-def loop(plot_type=10):
+def graphics_loop(plot_type=10):
 
     def nan(_drug_n):
             return np.all(np.isnan(hr.storage[cell_n, _drug_n]))
 
-    print 'starting loop with the following parameters: %s' % (plot_type)
+    print 'starting graphics loop with the following parameters: %s' % (plot_type)
 
     for drug in hr.drug_versions.keys():
         for cell_line, cell_n in hr.cell_idx.iteritems():
@@ -358,6 +356,31 @@ def loop(plot_type=10):
                 if [drug_v for drug_v in hr.drug_versions[drug] if not nan(hr.drug_idx[drug_v])]:
                     compare_to_htert(cell_line, drug, True, plot_type)
                     plt.clf()
+
+
+def computational_loop():
+
+    def nan(_drug_n):
+            return np.all(np.isnan(hr.storage[cell_n, _drug_n]))
+
+    print 'starting computational loop'
+
+    memory_dict = {}
+    drug2cell_line = defaultdict(list)
+    cell_line2drug = defaultdict(list)
+
+    for drug in hr.drug_versions.keys():
+        for cell_line, cell_n in hr.cell_idx.iteritems():
+            if [drug_v for drug_v in hr.drug_versions[drug] if not nan(hr.drug_idx[drug_v])]:
+                print cell_line, drug
+                _, collapsed, stacked = fragmented_round(cell_line, drug, plot_type=40)
+                memory_dict[drug, cell_line] = (collapsed, stacked)
+                drug2cell_line[drug].append(cell_line)
+                cell_line2drug[cell_line].append(drug)
+
+    dump(memory_dict, open('../analysis_runs/memdict.dmp', 'w'))
+    dump(drug2cell_line, open('../analysis_runs/drug2cell_line.dmp', 'w'))
+    dump(cell_line2drug, open('../analysis_runs/cell_line2drug.dmp', 'w'))
 
 
 def test_GI_50_reader():
@@ -369,7 +392,8 @@ if __name__ == "__main__":
     hr = raw_data_reader('C:\\Users\\Andrei\\Desktop', 'gb-breast_cancer.tsv')
     tr = GI_50_reader('C:\\Users\\Andrei\\Desktop', 'sd05-bis.tsv')
 
-    print fragmented_round('600MPE', 'GSK1838705', plot_type=30)
-    plt.show()
+    # print fragmented_round('600MPE', 'GSK1838705', plot_type=30)
+    # plt.show()
 
-    # loop(20)
+    # graphics_loop(30)
+    computational_loop()

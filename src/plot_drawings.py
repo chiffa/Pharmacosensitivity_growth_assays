@@ -63,6 +63,9 @@ def raw_plot(values, full_values, concentrations, noise_level, color):
 
 
 def summary_plot(means, mean_err, concentrations, anchor, color='black', legend=''):
+
+    # TODO: inject nan to mark that the control is different from the main sequence.
+
     ax = plt.subplot(111)
     ax.set_xscale('log')
 
