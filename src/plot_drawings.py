@@ -62,7 +62,7 @@ def raw_plot(values, full_values, concentrations, noise_level, color):
 
 
 
-def summary_plot(means, mean_err, concentrations, anchor, color='black', legend=''):
+def summary_plot(means, mean_err, concentrations, anchor, color='black', legend='', nofill=False):
 
     # TODO: inject nan to mark that the control is different from the main sequence.
 
@@ -75,7 +75,8 @@ def summary_plot(means, mean_err, concentrations, anchor, color='black', legend=
         plt.errorbar(concentrations[nanmask], means[nanmask], yerr=mean_err[nanmask], color=color, label=legend)
         ymax = means[nanmask] + mean_err[nanmask]
         ymin = means[nanmask] - mean_err[nanmask]
-        plt.fill_between(concentrations[nanmask], ymax, ymin, facecolor=color, alpha=0.25)
+        if not nofill:
+            plt.fill_between(concentrations[nanmask], ymax, ymin, facecolor=color, alpha=0.25)
 
 
 def vector_summary_plot(means_array, error_array, concentrations_array, anchor, legend_array=None, color='black'):

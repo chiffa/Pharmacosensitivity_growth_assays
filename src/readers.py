@@ -127,8 +127,6 @@ class raw_data_reader(object):
 
         drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
 
-        def nan(_drug_n):
-            return np.all(np.isnan(self.storage[cell_n, _drug_n]))
 
         def helper_round(T_container):
             T_container_vals = [np.repeat(T_container[cell_n, drug_n][:, np.newaxis], 10, axis=1) for drug_n in drugs_nos]
@@ -137,9 +135,7 @@ class raw_data_reader(object):
             return T_container_vals
 
         cell_n = self.cell_idx[cell]
-        retained_drugs = [drug_v for drug_v in self.drug_versions[drug] if not nan(self.drug_idx[drug_v])]
-        if retained_drugs == []:
-            retained_drugs = [drug_v for drug_v in self.drug_versions[drug]]
+        retained_drugs = [drug_v for drug_v in self.drug_versions[drug]]
 
         drugs_nos = [self.drug_idx[drug_v] for drug_v in retained_drugs]
         drug_vals = [self.storage[cell_n, drug_n].copy() for drug_n in drugs_nos]
@@ -374,9 +370,10 @@ def computational_loop():
             if [drug_v for drug_v in hr.drug_versions[drug] if not nan(hr.drug_idx[drug_v])]:
                 print cell_line, drug
                 _, collapsed, stacked = fragmented_round(cell_line, drug, plot_type=40)
-                memory_dict[drug, cell_line] = (collapsed, stacked)
-                drug2cell_line[drug].append(cell_line)
-                cell_line2drug[cell_line].append(drug)
+                if not collapsed[0] == None:
+                    memory_dict[drug, cell_line] = (collapsed, stacked)
+                    drug2cell_line[drug].append(cell_line)
+                    cell_line2drug[cell_line].append(drug)
 
     dump(memory_dict, open('../analysis_runs/memdict.dmp', 'w'))
     dump(drug2cell_line, open('../analysis_runs/drug2cell_line.dmp', 'w'))
@@ -395,5 +392,5 @@ if __name__ == "__main__":
     # print fragmented_round('600MPE', 'GSK1838705', plot_type=30)
     # plt.show()
 
-    # graphics_loop(30)
-    computational_loop()
+    graphics_loop(30)
+    # computational_loop()
