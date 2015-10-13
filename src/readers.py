@@ -302,8 +302,8 @@ def compare_to_htert(cell_line, drug, standardized, plot_type=1):
     print '\t',
 
     _, _, _, _, r_anchor = hr.retrieve('184A1', drug)
-    _, _, _, _, g_anchor = hr.retrieve('184A1', drug)
-    _, _, _, _, b_anchor = hr.retrieve('184A1', drug)
+    _, _, _, _, g_anchor = hr.retrieve('184B5', drug)
+    _, _, _, _, b_anchor = hr.retrieve(cell_line, drug)
 
     anchor = np.nanmin(np.array([r_anchor, g_anchor, b_anchor]))
 
