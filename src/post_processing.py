@@ -7,6 +7,7 @@ import plot_drawings as PD
 from pickle import load
 from chiffatools.Linalg_routines import gini_coeff
 from chiffatools.dataviz import smooth_histogram
+from scipy.stats import norm
 
 memdict = load(open('../analysis_runs/memdict.dmp', 'r'))
 #[drug, cell_line] -> (means, mean errs, unique_concs), (mean_arr, err_arr, unique, T0)
@@ -81,13 +82,14 @@ def stack_data_in_range_of_interest(concs_effective_range):
         means_accumulator.append(means)
         errs_accumulator.append(errs)
 
-    return all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator
-
-def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='BT483', normalize=False, log=True):
-
-    # method 3 & plotting
     means_accumulator = np.hstack(tuple(means_accumulator))
     errs_accumulator = np.hstack(tuple(errs_accumulator))
+
+    return all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator
+
+def plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='BT483', normalize=False, log=True):
+
+    # method 3 & plotting
     all_cell_lines = np.sort(all_cell_lines_arr)
 
     means_accumulator = means_accumulator.tolist()
@@ -156,7 +158,7 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
                          label='%s - %.2f - %s'%(cell_line, g_coeff, support_size),
                          color='k')
 
-        else:
+        elif g_coeff < 0.17:
             plt.errorbar(ramp,
                          means_array,
                          yerr=errs_array,
@@ -186,7 +188,7 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
     mp.rc('font', size=10)
     plt.xticks(ramp, np.array(names_accumulator)[support][argsorter], rotation='vertical')
     plt.subplots_adjust(bottom=0.25)
-    # plt.legend(ncol=2)
+    plt.legend(ncol=2)
     plt.show()
 
     triple_negative = ['BT20', 'BT549', 'HCC1143', 'HCC1187', 'HCC1395', 'HCC1599', 'HCC1806', 'HCC1937', 'HCC2185',
@@ -223,7 +225,7 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
     return norm_sorted_means, sorted_names
 
 
-def method4(norm_sorted_means, sorted_names, all_cell_lines):
+def plot_normalized(norm_sorted_means, sorted_names, all_cell_lines):
     accumulator = []
     ramp = np.linspace(0, sorted_names.shape[0], sorted_names.shape[0]).tolist()
     cmap = mp.cm.get_cmap(name='Paired')
@@ -262,15 +264,41 @@ def method4(norm_sorted_means, sorted_names, all_cell_lines):
     plt.show()
 
 
+def _95p_center(means_accumulator, errs_accumulator):
+
+    def helper(initial, bounds, target):
+        shift = target - initial
+        if np.abs(shift) < bounds:
+            return target
+        else:
+            scale = bounds / np.abs(shift)
+            return initial + shift*scale
+
+    target_percentile = np.sum(np.logical_not(np.isnan(means_accumulator)), axis=0)-1
+    target_percentile = 1-np.power(np.ones_like(target_percentile)*0.05, 1/np.sqrt(target_percentile))
+
+    _95p_cosntant = norm.interval(0.95)[1]
+
+    contractor = np.vectorize(lambda x: _95p_cosntant/norm.interval(x)[1])
+    contraction_interval = contractor(target_percentile)
+    contraction_interval = errs_accumulator/contraction_interval[np.newaxis, :]
+
+    contractor2 = np.vectorize(helper)
+
+    new_means_accumulator = contractor2(means_accumulator, contraction_interval, np.nanmean(means_accumulator, axis=0)[np.newaxis, :])
+
+    return new_means_accumulator
+
 if __name__ == '__main__':
 
-    all_cell_lines, concs_effective_range = get_concentrations_of_interest(contracted_range=True)
+    all_cell_lines, concs_effective_range = get_concentrations_of_interest(contracted_range=False)
     all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator = stack_data_in_range_of_interest(concs_effective_range)
     # ref_strain='BT483'
     # ref_strain='HCC1143'
     # ref_strain='HCC1569'
     # ref_strain='ZR751'
     # ref_strain='ZR75B'
-    norm_sorted_means, sorted_names = method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='BT483', normalize=False, log=True)
-    method4(norm_sorted_means, sorted_names, all_cell_lines,)
+    # means_accumulator = _95p_center(means_accumulator, errs_accumulator)
+    norm_sorted_means, sorted_names = plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='BT483', normalize=True, log=False)
+    plot_normalized(norm_sorted_means, sorted_names, all_cell_lines)
     # TODO: re-introduce normalization step
