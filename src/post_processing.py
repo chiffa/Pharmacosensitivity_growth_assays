@@ -8,6 +8,7 @@ from pickle import load
 from chiffatools.Linalg_routines import gini_coeff
 from chiffatools.dataviz import smooth_histogram
 from scipy.stats import norm
+import supporting_functions as SF
 
 memdict = load(open('../analysis_runs/memdict.dmp', 'r'))
 #[drug, cell_line] -> (means, mean errs, unique_concs), (mean_arr, err_arr, unique, T0)
@@ -15,44 +16,95 @@ drug2cell_line = load(open('../analysis_runs/drug2cell_line.dmp', 'r'))
 cell_line2drug = load(open('../analysis_runs/cell_line2drug.dmp', 'r'))
 
 
-def get_concentrations_of_interest(contracted_range=True):
+def get_concentrations_of_interest(contracted_range=1, base_line=['184A1', '184B5'], err_silencing=True):
 
     concs_effective_range = []
     all_cell_lines = set()
+    stasis_super_pad = []
 
     for drug, cell_lines in drug2cell_line.items():
 
         means_pad = []
         errs_pad = []
         unique_c = []
+        contractor_pads = []
+        stasis_pad = []
         all_cell_lines.update(cell_lines)
         for i, cell_line in enumerate(cell_lines):
 
-            wrap, _ = memdict[drug, cell_line]
+            wrap, wrap2 = memdict[drug, cell_line]
             means, errs, unique_c = wrap
-            filter = errs > 0.1
-            errs[filter] = np.nan
-            means[filter] = np.nan
+            if err_silencing:
+                _filter = errs > 0.1
+                errs[_filter] = np.nan
+                means[_filter] = np.nan
             means_pad.append(means)
             errs_pad.append(errs)
 
+            if contracted_range == 2 :
+                if cell_line in base_line:
+                    norm_means, norm_errs = wrap2
+                    contractor = np.abs(norm_means - 1.)
+                    contractor_pads += np.vsplit(contractor, contractor.shape[0])
+                    stasis_pad += np.vsplit(norm_means, norm_means.shape[0])
+
         means_pad = np.array(means_pad)
         errs_pad = np.array(errs_pad)
+        if contractor_pads:
+            stasis_pad = np.vstack(stasis_pad)
+            contractor_pads = np.vstack(contractor_pads)
+        else:
+            stasis_pad = np.zeros_like(means_pad)
+            stasis_pad[:, :] = np.nan
+            contractor_pads = np.zeros_like(means_pad)
+            contractor_pads[:, :] = np.nan
+
         _75 = np.nanpercentile(means_pad, 75, axis=0)
         _25 = np.nanpercentile(means_pad, 25, axis=0)
-        if contracted_range:
+
+        if contracted_range == 1:
             selector = np.logical_and(_75 < .9, _25 > 0.1 )
             if any(selector):
                 sel2 = np.argmin(np.sum(np.isnan(means_pad[:, selector]), axis=0))
                 concs_effective_range.append((drug, cell_lines, [unique_c[selector][sel2]],
                                           means_pad[:, selector][:, sel2][:, np.newaxis],
-                                          errs_pad[:, selector][:, sel2][:, np.newaxis]))
-        else:
+                                          errs_pad[:, selector][:, sel2][:, np.newaxis],
+                                          np.nanmean(stasis_pad[:, selector][:, sel2][:, np.newaxis], axis=0)))
+        if contracted_range == 2:
+            selector = np.logical_and(_25 < .9, _75 > 0.1 )
+            if any(selector):
+                contractor_pads = contractor_pads[:, selector]
+                if not np.all(np.isnan(contractor_pads)):
+                    sel3 = np.int(np.median(np.argmin(contractor_pads, axis=1)))
+                else:
+                    sel3 = 0
+                print sel3, np.array(stasis_pad[:, selector][:, sel3])
+                stasis_super_pad.append(np.nanmean(stasis_pad[:, sel3]))
+                concs_effective_range.append((drug, cell_lines, [unique_c[selector][sel3]],
+                                              means_pad[:, selector][:, sel3][:, np.newaxis],
+                                              errs_pad[:, selector][:, sel3][:, np.newaxis],
+                                              np.nanmean(stasis_pad[:, selector][:, sel3][:, np.newaxis], axis=0)))
+
+
+        if contracted_range == 3:
+            selector = np.logical_and(_75 < .9, _25 > 0.1 )
+            if any(selector):
+                sel2 = np.argmin(np.sum(np.isnan(means_pad[:, selector]), axis=0))
+                concs_effective_range.append((drug, cell_lines, [unique_c[selector][sel2]],
+                                          means_pad[:, selector][:, sel2][:, np.newaxis],
+                                          errs_pad[:, selector][:, sel2][:, np.newaxis],
+                                          np.nanmean(stasis_pad[:, selector][:, sel2][:, np.newaxis], axis=0)))
+
+        if not contracted_range:
             selector = np.logical_and(_25 < .9, _75 > 0.1 )
             if any(selector):
                 concs_effective_range.append((drug, cell_lines, unique_c[selector],
                                           means_pad[:, selector],
-                                          errs_pad[:, selector]))
+                                          errs_pad[:, selector],
+                                          np.nanmean(stasis_pad[:, selector], axis=0)))
+
+        if contracted_range and not contracted_range in [1, 2, 3]:
+            raise Exception('contracted_range value outside [0, 1, 2, 3]')
 
     return all_cell_lines, concs_effective_range
 
@@ -64,7 +116,10 @@ def stack_data_in_range_of_interest(concs_effective_range):
     names_accumulator = []
 
     for elt in concs_effective_range:
-        names_accumulator += [elt[0]+" - %.2E"%conc for conc in elt[2]]
+        print 'anchor!'
+        print elt[2]
+        print elt[5]
+        names_accumulator += [elt[0]+" - %.2E - %.2F"%(conc, stasis) for conc, stasis in zip(elt[2], elt[5])]
         cell_lines = elt[1]
         names_pad = np.array(list(all_cell_lines.difference(set(cell_lines))))
         names_array = np.hstack((np.array(cell_lines), names_pad))
@@ -87,7 +142,7 @@ def stack_data_in_range_of_interest(concs_effective_range):
 
     return all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator
 
-def plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='BT483', normalize=False, log=True):
+def plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='BT483', normalize=False, log=True, sort_by='average'):
 
     # method 3 & plotting
     all_cell_lines = np.sort(all_cell_lines_arr)
@@ -96,8 +151,6 @@ def plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names
     errs_accumulator = errs_accumulator.tolist()
     all_cell_lines = all_cell_lines.tolist()
 
-
-    idx = all_cell_lines.index(ref_strain)
     idx1 = all_cell_lines.index('184A1')
     idx2 = all_cell_lines.index('184B5')
 
@@ -112,13 +165,21 @@ def plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names
     #                 np.logical_not(np.isnan(means_accumulator[idx1])),
     #                 np.logical_not(np.isnan(means_accumulator[idx2])))
 
+    idx = all_cell_lines.index(ref_strain)
     support = np.logical_not(np.isnan(means_accumulator[idx]))
 
     average_stress_intesity = np.nanmean(np.array(means_accumulator)[:, support], axis=0)
     log_std_stress_intensity = np.nanstd(np.log2(np.array(means_accumulator)[:, support]), axis=0)
     std_stress_intensity = np.nanstd(np.array(means_accumulator)[:, support], axis=0)
     # argsorter = np.argsort(mean_for_proxy_WT[support]/average_stress_intesity)
-    argsorter = np.argsort(average_stress_intesity)
+    if sort_by == 'average':
+        argsorter = np.argsort(average_stress_intesity)
+    elif sort_by == 'WT_proxy':
+        argsorter = np.argsort(np.array(means_accumulator)[:, support][-1, :])
+    elif sort_by == 'ref_strain':
+        argsorter = np.argsort(np.array(means_accumulator)[:, support][idx, :])
+    else:
+        argsorter = np.argsort(average_stress_intesity)
 
     average_stress_intesity = average_stress_intesity[argsorter]
     log_std_stress_intensity = log_std_stress_intensity[argsorter]
@@ -158,7 +219,7 @@ def plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names
                          label='%s - %.2f - %s'%(cell_line, g_coeff, support_size),
                          color='k')
 
-        elif g_coeff < 0.17:
+        else:
             plt.errorbar(ramp,
                          means_array,
                          yerr=errs_array,
@@ -193,7 +254,6 @@ def plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names
 
     triple_negative = ['BT20', 'BT549', 'HCC1143', 'HCC1187', 'HCC1395', 'HCC1599', 'HCC1806', 'HCC1937', 'HCC2185',
         'HCC3153', 'HCC38', 'HCC70', 'HS578T', 'MDAMB157', 'MDAMB231', 'MDAMB436', 'MDAMB468', 'SUM102PT', 'SUM52PE']
-
 
 
     for i, cell_line in enumerate(all_cell_lines):
@@ -289,16 +349,26 @@ def _95p_center(means_accumulator, errs_accumulator):
 
     return new_means_accumulator
 
+
+def cell_line_fingerprint(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator):
+    all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator = SF.preformat(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator)
+
+
+def drug_fingerprint(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator):
+    pass
+
+
+def drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator):
+    pass
+
+
 if __name__ == '__main__':
 
-    all_cell_lines, concs_effective_range = get_concentrations_of_interest(contracted_range=False)
+    all_cell_lines, concs_effective_range = get_concentrations_of_interest(contracted_range=2, err_silencing=True)
+    # TODO: add support for range contraction (for isntance for use with T0)
+
     all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator = stack_data_in_range_of_interest(concs_effective_range)
-    # ref_strain='BT483'
-    # ref_strain='HCC1143'
-    # ref_strain='HCC1569'
-    # ref_strain='ZR751'
-    # ref_strain='ZR75B'
+
     # means_accumulator = _95p_center(means_accumulator, errs_accumulator)
-    norm_sorted_means, sorted_names = plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='BT483', normalize=True, log=False)
+    norm_sorted_means, sorted_names = plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='WT_proxy', normalize=False, log=False, sort_by='WT_proxy')
     plot_normalized(norm_sorted_means, sorted_names, all_cell_lines)
-    # TODO: re-introduce normalization step

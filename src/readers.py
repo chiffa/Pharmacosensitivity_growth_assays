@@ -266,6 +266,7 @@ def fragmented_round(cell_line, drug, color='black', plot_type = 10, injected_an
 
     TF_corrected, T0_corrected = (TF_corrected[clean_mask, :, :], T0_median[clean_mask, :])
     means_arr, errs_arr = (means_arr[clean_mask, :], errs_arr[clean_mask, :])
+    saved_means_arr, saved_errs_arr  = means_arr.copy(), errs_arr.copy()
 
     norm_factor = None
 
@@ -291,7 +292,12 @@ def fragmented_round(cell_line, drug, color='black', plot_type = 10, injected_an
         PD.summary_plot(means, errs, unique_concs, anchor, color = color)
         # plt.show()
 
-    return plot_touched, (means, errs, unique_concs), (means_arr, errs_arr, T0_corrected, unique_concs_stack)
+    norm_factor = SF.retrieve_normalization_factor(T0_corrected)
+    norm_plate, norm_means, norm_errs, norm_std_of_tools = SF.normalize(TF_corrected, saved_means_arr,
+                                                                        saved_errs_arr, hr.std_of_tools,
+                                                                        norm_factor)
+
+    return plot_touched, (means, errs, unique_concs), (norm_means, norm_errs)
 
 
 def compare_to_htert(cell_line, drug, standardized, plot_type=1):
@@ -392,5 +398,5 @@ if __name__ == "__main__":
     # print fragmented_round('600MPE', 'GSK1838705', plot_type=30)
     # plt.show()
 
-    graphics_loop(30)
-    # computational_loop()
+    # graphics_loop(30)
+    computational_loop()

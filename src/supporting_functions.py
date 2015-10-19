@@ -6,6 +6,9 @@ from scipy.stats import t, norm
 from scipy.spatial.distance import pdist, squareform
 from matplotlib import pyplot as plt
 import os
+import warnings
+warnings.filterwarnings("ignore", category = RuntimeWarning)
+
 
 drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
 
@@ -338,3 +341,50 @@ def logistic_regression(TF, T0, concentrations, background_std):
     alphas = compensation_TF - compensation_T0
 
     return alphas
+
+
+def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator):
+    all_cell_lines = np.sort(all_cell_lines_arr)
+
+    means_accumulator = means_accumulator.tolist()
+    errs_accumulator = errs_accumulator.tolist()
+    all_cell_lines = all_cell_lines.tolist()
+
+    idx1 = all_cell_lines.index('184A1')
+    idx2 = all_cell_lines.index('184B5')
+
+    mean_for_proxy_WT = np.nanmean(np.array(means_accumulator)[[idx1, idx2], :], axis=0)
+    errs_for_proxy_WT = np.nanmean(np.array(errs_accumulator)[[idx1, idx2],:], axis=0)
+
+    all_cell_lines.append('WT_proxy')
+    means_accumulator.append(mean_for_proxy_WT.tolist())
+    errs_accumulator.append(errs_for_proxy_WT.tolist())
+
+    means_accumulator = np.array(means_accumulator)
+    errs_accumulator = np.array(errs_accumulator)
+    support = np.logical_not(np.isnan(means_accumulator[-1, :]))
+
+    means_accumulator = means_accumulator[:, support]
+    errs_accumulator =  errs_accumulator[:, support]
+    names_accumulator = names_accumulator[:, support]
+
+    line_wise_support = np.sum(np.logical_not(np.isnan(means_accumulator)), axis=0)
+    support_filter = line_wise_support > 10
+
+    means_accumulator = means_accumulator[support_filter, :]
+    errs_accumulator = errs_accumulator[support_filter, :]
+    all_cell_lines_arr = all_cell_lines_arr[support_filter]
+
+    return means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator
+
+
+def jensen_shannon_div(x, y): #Jensen-shannon divergence
+    # @author: jonathanfriedman
+    x = np.array(x)
+    y = np.array(y)
+    d1 = x*np.log2(2*x/(x+y))
+    d2 = y*np.log2(2*y/(x+y))
+    d1[np.isnan(d1)] = 0
+    d2[np.isnan(d2)] = 0
+    d = 0.5*np.sum(d1+d2)
+    return d
