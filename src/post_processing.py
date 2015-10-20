@@ -378,7 +378,6 @@ def drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, na
             reverse_look_up_pad[i, j, :] = np.array([i, j])
             reverse_look_up_pad[j, i, :] = np.array([i, j])
 
-    # Normalized to the effect of two drugs applied themselves independintly
 
     all_cell_lines = all_cell_lines_arr.tolist()
     idx1 = all_cell_lines.index('184A1')
@@ -408,9 +407,10 @@ def drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, na
 
     mean_effect = np.nanmean(support_matrix, axis=2)
 
-    support_of_effect = np.sum(np.isnan(support_matrix), axis=2)
+    support_of_effect = np.sum(np.logical_not(np.isnan(support_matrix)), axis=2)
 
-    # TODO: we might need to apply outlier exclusion to avoid "rogues" problem
+
+    combined_effect[support_of_effect < 5] = np.median(combined_effect)
 
     sorting_index = hierchical_clustering(combined_effect, names_accumulator)
 
@@ -422,31 +422,18 @@ def drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, na
 
     _names_accumulator = names_accumulator[sorting_index]
 
-    combined_effect[combined_effect > 1.] = np.nan
+    # combined_effect[combined_effect > 1.] = np.nan
+    # combined_effect[combined_effect < 0.1] = np.nan
 
-    # ax = plt.subplot(131)
     plt.imshow(combined_effect, cmap='coolwarm', interpolation='nearest')
     plt.colorbar()
-    # plt.xticks(np.linspace(0, _names_accumulator.shape[0]-1, _names_accumulator.shape[0]), _names_accumulator, rotation='vertical')
-    # plt.yticks(np.linspace(0, _names_accumulator.shape[0]-1, _names_accumulator.shape[0]), _names_accumulator)
-
-    # plt.subplot(132)
-    # plt.imshow(mean_effect, cmap='coolwarm', interpolation='nearest')
-    # plt.colorbar()
-    # plt.xticks(np.linspace(0, names_accumulator.shape[0]-1, names_accumulator.shape[0]), names_accumulator, rotation='vertical')
-    # plt.yticks(np.linspace(0, names_accumulator.shape[0]-1, names_accumulator.shape[0]), names_accumulator)
-    #
-    # plt.subplot(133)
-    # plt.imshow(support_of_effect, cmap='coolwarm', interpolation='nearest')
-    # plt.colorbar()
-    # plt.xticks(np.linspace(0, names_accumulator.shape[0]-1, names_accumulator.shape[0]), names_accumulator, rotation='vertical')
-    # plt.yticks(np.linspace(0, names_accumulator.shape[0]-1, names_accumulator.shape[0]), names_accumulator)
+    plt.xticks(np.linspace(0, _names_accumulator.shape[0]-1, _names_accumulator.shape[0]), _names_accumulator, rotation='vertical')
+    plt.yticks(np.linspace(0, _names_accumulator.shape[0]-1, _names_accumulator.shape[0]), _names_accumulator)
 
     plt.subplots_adjust(bottom=0.3)
     plt.show()
 
-    # 47, 48 x 19, 20
-    i, j = tuple(reverse_look_up_pad[48, 20, :].tolist())
+    i, j = tuple(reverse_look_up_pad[65, 1, :].tolist())
 
     plt.imshow(means_accumulator[:, [i, j]], cmap='coolwarm', interpolation='nearest')
     plt.colorbar()
@@ -455,11 +442,6 @@ def drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, na
 
     plt.subplots_adjust(bottom=0.3)
     plt.show()
-
-
-    # we want to retrieve average death of cancer cells and average death of the WT_proxy cells
-    # we want to find the drug combination that has the highest death of cancer cells compared to the WT_proxy cells
-    # we want to pull out the action profile of the drugs associated to the cell action and destroy them
 
 
 if __name__ == '__main__':

@@ -5,6 +5,8 @@ from chiffatools.Linalg_routines import rm_nans
 from scipy.stats import t, norm
 from scipy.spatial.distance import pdist, squareform
 from matplotlib import pyplot as plt
+from chiffatools.dataviz import smooth_histogram
+from chiffatools.Linalg_routines import rm_nans
 import os
 import warnings
 warnings.filterwarnings("ignore", category = RuntimeWarning)
@@ -345,18 +347,12 @@ def logistic_regression(TF, T0, concentrations, background_std):
 
 def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator):
 
-    rogues = ['SUM159PT']
-
     means_accumulator = means_accumulator.tolist()
     errs_accumulator = errs_accumulator.tolist()
     all_cell_lines =  np.sort(all_cell_lines_arr).tolist()
 
     idx1 = all_cell_lines.index('184A1')
     idx2 = all_cell_lines.index('184B5')
-
-    idx_set = []
-    for cl in rogues:
-        idx_set.append(all_cell_lines.index(cl))
 
     mean_for_proxy_WT = np.nanmean(np.array(means_accumulator)[[idx1, idx2], :], axis=0)
     errs_for_proxy_WT = np.nanmean(np.array(errs_accumulator)[[idx1, idx2], :], axis=0)
@@ -371,13 +367,19 @@ def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_acc
     names_accumulator = np.array(names_accumulator)
     all_cell_lines_arr = np.array(all_cell_lines)
 
+    tmp_calc = rm_nans(means_accumulator)
+    q1 = np.percentile(tmp_calc, 25)
+    q3 = np.percentile(tmp_calc, 75)
+    ub = q3 + (q3-q1)*1.5
+    means_accumulator[means_accumulator > ub] = np.nan
+    errs_accumulator[means_accumulator > ub] = np.nan
+
     means_accumulator = means_accumulator[:, support]
     errs_accumulator =  errs_accumulator[:, support]
     names_accumulator = names_accumulator[support]
 
     line_wise_support = np.sum(np.logical_not(np.isnan(means_accumulator)), axis=1)
     support_filter = line_wise_support > 10
-    support_filter[idx_set] = False
 
     means_accumulator = means_accumulator[support_filter, :]
     errs_accumulator = errs_accumulator[support_filter, :]
