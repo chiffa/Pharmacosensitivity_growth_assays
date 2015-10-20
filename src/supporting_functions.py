@@ -344,17 +344,22 @@ def logistic_regression(TF, T0, concentrations, background_std):
 
 
 def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator):
-    all_cell_lines = np.sort(all_cell_lines_arr)
+
+    rogues = ['SUM159PT']
 
     means_accumulator = means_accumulator.tolist()
     errs_accumulator = errs_accumulator.tolist()
-    all_cell_lines = all_cell_lines.tolist()
+    all_cell_lines =  np.sort(all_cell_lines_arr).tolist()
 
     idx1 = all_cell_lines.index('184A1')
     idx2 = all_cell_lines.index('184B5')
 
+    idx_set = []
+    for cl in rogues:
+        idx_set.append(all_cell_lines.index(cl))
+
     mean_for_proxy_WT = np.nanmean(np.array(means_accumulator)[[idx1, idx2], :], axis=0)
-    errs_for_proxy_WT = np.nanmean(np.array(errs_accumulator)[[idx1, idx2],:], axis=0)
+    errs_for_proxy_WT = np.nanmean(np.array(errs_accumulator)[[idx1, idx2], :], axis=0)
 
     all_cell_lines.append('WT_proxy')
     means_accumulator.append(mean_for_proxy_WT.tolist())
@@ -363,13 +368,16 @@ def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_acc
     means_accumulator = np.array(means_accumulator)
     errs_accumulator = np.array(errs_accumulator)
     support = np.logical_not(np.isnan(means_accumulator[-1, :]))
+    names_accumulator = np.array(names_accumulator)
+    all_cell_lines_arr = np.array(all_cell_lines)
 
     means_accumulator = means_accumulator[:, support]
     errs_accumulator =  errs_accumulator[:, support]
-    names_accumulator = names_accumulator[:, support]
+    names_accumulator = names_accumulator[support]
 
-    line_wise_support = np.sum(np.logical_not(np.isnan(means_accumulator)), axis=0)
+    line_wise_support = np.sum(np.logical_not(np.isnan(means_accumulator)), axis=1)
     support_filter = line_wise_support > 10
+    support_filter[idx_set] = False
 
     means_accumulator = means_accumulator[support_filter, :]
     errs_accumulator = errs_accumulator[support_filter, :]

@@ -9,6 +9,7 @@ from chiffatools.Linalg_routines import gini_coeff
 from chiffatools.dataviz import smooth_histogram
 from scipy.stats import norm
 import supporting_functions as SF
+from chiffatools.Linalg_routines import hierchical_clustering
 
 memdict = load(open('../analysis_runs/memdict.dmp', 'r'))
 #[drug, cell_line] -> (means, mean errs, unique_concs), (mean_arr, err_arr, unique, T0)
@@ -71,14 +72,14 @@ def get_concentrations_of_interest(contracted_range=1, base_line=['184A1', '184B
                                           errs_pad[:, selector][:, sel2][:, np.newaxis],
                                           np.nanmean(stasis_pad[:, selector][:, sel2][:, np.newaxis], axis=0)))
         if contracted_range == 2:
-            selector = np.logical_and(_25 < .9, _75 > 0.1 )
+            # selector = np.logical_and(_25 < .9, _75 > 0.1 )
+            selector = np.nanmedian(stasis_pad, axis=0) > 0.9
             if any(selector):
                 contractor_pads = contractor_pads[:, selector]
                 if not np.all(np.isnan(contractor_pads)):
                     sel3 = np.int(np.median(np.argmin(contractor_pads, axis=1)))
                 else:
                     sel3 = 0
-                print sel3, np.array(stasis_pad[:, selector][:, sel3])
                 stasis_super_pad.append(np.nanmean(stasis_pad[:, sel3]))
                 concs_effective_range.append((drug, cell_lines, [unique_c[selector][sel3]],
                                               means_pad[:, selector][:, sel3][:, np.newaxis],
@@ -116,12 +117,11 @@ def stack_data_in_range_of_interest(concs_effective_range):
     names_accumulator = []
 
     for elt in concs_effective_range:
-        print 'anchor!'
-        print elt[2]
-        print elt[5]
         names_accumulator += [elt[0]+" - %.2E - %.2F"%(conc, stasis) for conc, stasis in zip(elt[2], elt[5])]
         cell_lines = elt[1]
         names_pad = np.array(list(all_cell_lines.difference(set(cell_lines))))
+        # TODO: this piece of sorting seems to be working, even if it is not necessarily working pretty well
+        # or clearly => reformat
         names_array = np.hstack((np.array(cell_lines), names_pad))
 
 
@@ -149,7 +149,7 @@ def plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names
 
     means_accumulator = means_accumulator.tolist()
     errs_accumulator = errs_accumulator.tolist()
-    all_cell_lines = all_cell_lines.tolist()
+    all_cell_lines = all_cell_lines_arr.tolist()
 
     idx1 = all_cell_lines.index('184A1')
     idx2 = all_cell_lines.index('184B5')
@@ -252,9 +252,10 @@ def plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names
     plt.legend(ncol=2)
     plt.show()
 
-    triple_negative = ['BT20', 'BT549', 'HCC1143', 'HCC1187', 'HCC1395', 'HCC1599', 'HCC1806', 'HCC1937', 'HCC2185',
-        'HCC3153', 'HCC38', 'HCC70', 'HS578T', 'MDAMB157', 'MDAMB231', 'MDAMB436', 'MDAMB468', 'SUM102PT', 'SUM52PE']
+    # triple_negative = ['BT20', 'BT549', 'HCC1143', 'HCC1187', 'HCC1395', 'HCC1599', 'HCC1806', 'HCC1937', 'HCC2185',
+    #     'HCC3153', 'HCC38', 'HCC70', 'HS578T', 'MDAMB157', 'MDAMB231', 'MDAMB436', 'MDAMB468', 'SUM102PT', 'SUM52PE']
 
+    triple_negative = ['WT_proxy', '184A1', '184B5']
 
     for i, cell_line in enumerate(all_cell_lines):
         support_size = np.sum(np.logical_not(np.isnan(np.array(means_accumulator[i]))))
@@ -267,9 +268,15 @@ def plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names
                 plt.plot([g_coeff], [mean_fit],
                      'o', color = 'r',
                      label='%s g: %.2f af: %.2f s: %s' % (cell_line, g_coeff, mean_fit, support_size))
+
+            elif cell_line =='BT483':
+                plt.plot([g_coeff], [mean_fit],
+                     'o', color = 'g',
+                     label='%s g: %.2f af: %.2f s: %s' % (cell_line, g_coeff, mean_fit, support_size))
+
             else:
                 plt.plot([g_coeff], [mean_fit],
-                     'o', color = 'k',
+                     'o', color = 'b',
                      label='%s g: %.2f af: %.2f s: %s' % (cell_line, g_coeff, mean_fit, support_size))
 
     plt.xlabel('gini coefficient')
@@ -351,24 +358,119 @@ def _95p_center(means_accumulator, errs_accumulator):
 
 
 def cell_line_fingerprint(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator):
-    all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator = SF.preformat(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator)
+    means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator = SF.preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator)
 
 
 def drug_fingerprint(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator):
-    pass
+    means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator = SF.preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator)
 
 
 def drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator):
-    pass
+    means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator = SF.preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator)
+
+    support_matrix = np.zeros((names_accumulator.shape[0], names_accumulator.shape[0], means_accumulator.shape[0]))
+    reverse_look_up_pad = np.zeros((names_accumulator.shape[0], names_accumulator.shape[0], 2))
+    names_len = names_accumulator.shape[0]
+    for i in range(0, names_len):
+        for j in range(i, names_len):
+            support_matrix[i, j, :] = means_accumulator[:, i] * means_accumulator[:, j]
+            support_matrix[j, i, :] = means_accumulator[:, i] * means_accumulator[:, j]
+            reverse_look_up_pad[i, j, :] = np.array([i, j])
+            reverse_look_up_pad[j, i, :] = np.array([i, j])
+
+    # Normalized to the effect of two drugs applied themselves independintly
+
+    all_cell_lines = all_cell_lines_arr.tolist()
+    idx1 = all_cell_lines.index('184A1')
+    idx2 = all_cell_lines.index('184B5')
+    false_filter = np.zeros((all_cell_lines_arr.shape[0])).astype(np.bool)
+    false_filter[idx1] = True
+    false_filter[idx2] = True
+    false_filter[-1] = True
+    false_filter = np.logical_not(false_filter)
+
+    norm_mean = support_matrix[:, :, -1].copy()
+    support_matrix = support_matrix[:, :, false_filter] / norm_mean[:, :, np.newaxis]
+
+    combined_effect = np.zeros((names_accumulator.shape[0], names_accumulator.shape[0]))
+    for i in range(0, names_len):
+        for j in range(i, names_len):
+            comparable_support = np.logical_and(np.logical_not(np.isnan(support_matrix[i, i, :])),
+                                                np.logical_not(np.isnan(support_matrix[j, j, :])))
+            comparable_value = np.nanmean(support_matrix[i, j, comparable_support])
+            comparable_value = comparable_value/np.min(
+                                                    np.array([
+                                                        np.nanmean(support_matrix[i, i, comparable_support]),
+                                                        np.nanmean(support_matrix[j, j, comparable_support])
+                                                              ]))
+            combined_effect[i, j] = comparable_value
+            combined_effect[j, i] = comparable_value
+
+    mean_effect = np.nanmean(support_matrix, axis=2)
+
+    support_of_effect = np.sum(np.isnan(support_matrix), axis=2)
+
+    # TODO: we might need to apply outlier exclusion to avoid "rogues" problem
+
+    sorting_index = hierchical_clustering(combined_effect, names_accumulator)
+
+    combined_effect = combined_effect[sorting_index, :]
+    combined_effect = combined_effect[:, sorting_index]
+
+    reverse_look_up_pad = reverse_look_up_pad[sorting_index, :, :]
+    reverse_look_up_pad = reverse_look_up_pad[:, sorting_index, :]
+
+    _names_accumulator = names_accumulator[sorting_index]
+
+    combined_effect[combined_effect > 1.] = np.nan
+
+    # ax = plt.subplot(131)
+    plt.imshow(combined_effect, cmap='coolwarm', interpolation='nearest')
+    plt.colorbar()
+    # plt.xticks(np.linspace(0, _names_accumulator.shape[0]-1, _names_accumulator.shape[0]), _names_accumulator, rotation='vertical')
+    # plt.yticks(np.linspace(0, _names_accumulator.shape[0]-1, _names_accumulator.shape[0]), _names_accumulator)
+
+    # plt.subplot(132)
+    # plt.imshow(mean_effect, cmap='coolwarm', interpolation='nearest')
+    # plt.colorbar()
+    # plt.xticks(np.linspace(0, names_accumulator.shape[0]-1, names_accumulator.shape[0]), names_accumulator, rotation='vertical')
+    # plt.yticks(np.linspace(0, names_accumulator.shape[0]-1, names_accumulator.shape[0]), names_accumulator)
+    #
+    # plt.subplot(133)
+    # plt.imshow(support_of_effect, cmap='coolwarm', interpolation='nearest')
+    # plt.colorbar()
+    # plt.xticks(np.linspace(0, names_accumulator.shape[0]-1, names_accumulator.shape[0]), names_accumulator, rotation='vertical')
+    # plt.yticks(np.linspace(0, names_accumulator.shape[0]-1, names_accumulator.shape[0]), names_accumulator)
+
+    plt.subplots_adjust(bottom=0.3)
+    plt.show()
+
+    # 47, 48 x 19, 20
+    i, j = tuple(reverse_look_up_pad[48, 20, :].tolist())
+
+    plt.imshow(means_accumulator[:, [i, j]], cmap='coolwarm', interpolation='nearest')
+    plt.colorbar()
+    plt.yticks(np.linspace(0, all_cell_lines_arr.shape[0]-1, all_cell_lines_arr.shape[0]), all_cell_lines_arr)
+    plt.xticks(np.linspace(0, 1, 2), names_accumulator[[i, j]], rotation='vertical')
+
+    plt.subplots_adjust(bottom=0.3)
+    plt.show()
+
+
+    # we want to retrieve average death of cancer cells and average death of the WT_proxy cells
+    # we want to find the drug combination that has the highest death of cancer cells compared to the WT_proxy cells
+    # we want to pull out the action profile of the drugs associated to the cell action and destroy them
 
 
 if __name__ == '__main__':
 
-    all_cell_lines, concs_effective_range = get_concentrations_of_interest(contracted_range=2, err_silencing=True)
-    # TODO: add support for range contraction (for isntance for use with T0)
-
+    all_cell_lines, concs_effective_range = get_concentrations_of_interest(contracted_range=2, err_silencing=False)
     all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator = stack_data_in_range_of_interest(concs_effective_range)
 
+    drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator)
     # means_accumulator = _95p_center(means_accumulator, errs_accumulator)
-    norm_sorted_means, sorted_names = plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='WT_proxy', normalize=False, log=False, sort_by='WT_proxy')
+    raise Exception('debug!')
+    norm_sorted_means, sorted_names = plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr,
+                                                    names_accumulator, ref_strain='BT483', normalize=True,
+                                                    log=True, sort_by='WT_proxy')
     plot_normalized(norm_sorted_means, sorted_names, all_cell_lines)

@@ -360,7 +360,7 @@ def graphics_loop(plot_type=10):
                     plt.clf()
 
 
-def computational_loop():
+def computational_loop(plot_type=40):
 
     def nan(_drug_n):
             return np.all(np.isnan(hr.storage[cell_n, _drug_n]))
@@ -375,7 +375,7 @@ def computational_loop():
         for cell_line, cell_n in hr.cell_idx.iteritems():
             if [drug_v for drug_v in hr.drug_versions[drug] if not nan(hr.drug_idx[drug_v])]:
                 print cell_line, drug
-                _, collapsed, stacked = fragmented_round(cell_line, drug, plot_type=40)
+                _, collapsed, stacked = fragmented_round(cell_line, drug, plot_type=plot_type)
                 if not collapsed[0] == None:
                     memory_dict[drug, cell_line] = (collapsed, stacked)
                     drug2cell_line[drug].append(cell_line)
@@ -399,4 +399,4 @@ if __name__ == "__main__":
     # plt.show()
 
     # graphics_loop(30)
-    computational_loop()
+    computational_loop(41)
