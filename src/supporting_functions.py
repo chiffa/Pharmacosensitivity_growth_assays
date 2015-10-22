@@ -405,49 +405,48 @@ def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_acc
     return means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator
 
 
-def cross_subname_match(string, list):
-    Translator = {'Tykerb':'Lapatinib',
+def cross_subname_match(my_string, list):
+    translator = {'Tykerb':'Lapatinib',
                   'Topotecan':'TPT',
                   'Ispinesib':'SB-715992',
                   'Gefitinib':'Iressa',
                   'L-779405':'L779450',
                   }
-    translator_pad = [substr in string for substr in sorted(Translator.keys())]
+    # print my_string
+    for key, value in translator.iteritems():
+        if value in my_string:
+            my_string = my_string.replace(value, key, 1)
+            break
 
     for i, list_string in enumerate(list):
-        if string in list_string:
+        if my_string in list_string:
             return i
-        if list_string in string:
+        if list_string in my_string:
             return  i
-        if any([substr in string for substr in Translator.keys()]):
 
     return None
 
 
 def read_drug_info(drug_array):
     cropped_drug_array = [drug_name.split(' - ')[0] for drug_name in drug_array]
-    info1 = []
-    info2 = []
-    acc = []
-    non_found = []
-    non_matched = []
+    targets = np.zeros_like(np.array(cropped_drug_array)).astype(np.string_)
+    FDA_status = np.zeros_like(np.array(cropped_drug_array)).astype(np.string_)
     with open(drug_info_location, 'r') as source_fle:
         rdr = reader(source_fle, delimiter='\t')
         rdr.next()
         for line in rdr:
             drug_name = line[0]
             if drug_name in cropped_drug_array:
-                non_found.append(drug_name)
+                i = cropped_drug_array.index(drug_name)
             elif cross_subname_match(drug_name, cropped_drug_array) is not None:
                 i = cross_subname_match(drug_name, cropped_drug_array)
-                non_found.append(drug_name)
-                non_found.append(cropped_drug_array[i])
             else:
-                non_matched.append(drug_name)
-    non_found = list(set(cropped_drug_array) - set(non_found))
-    print sorted(non_found)
-    print sorted(non_matched)
+                i = -1
+            if i >= 0:
+                targets[i] = line[1]
+                FDA_status[i] = line[2]
 
+    return targets, FDA_status
 
 
 def jensen_shannon_div(x, y): #Jensen-shannon divergence

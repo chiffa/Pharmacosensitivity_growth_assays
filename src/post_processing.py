@@ -367,8 +367,9 @@ def drug_fingerprint(all_cell_lines_arr, means_accumulator, errs_accumulator, na
 
 def drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator):
 
-    SF.read_drug_info(names_accumulator)
+    targets, FDA_status = SF.read_drug_info(names_accumulator)
 
+    names_accumulator = [name+' - '+targets[i]+' - '+FDA_status[i] for i, name in enumerate(names_accumulator)]
     means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator = SF.preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator)
 
     support_matrix = np.zeros((names_accumulator.shape[0], names_accumulator.shape[0], means_accumulator.shape[0]))
@@ -477,12 +478,7 @@ if __name__ == '__main__':
 
     drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator)
     # means_accumulator = _95p_center(means_accumulator, errs_accumulator)
-    raise Exception('debug!')
     norm_sorted_means, sorted_names = plot_response(means_accumulator, errs_accumulator, all_cell_lines_arr,
                                                     names_accumulator, ref_strain='BT483', normalize=True,
                                                     log=True, sort_by='WT_proxy')
     plot_normalized(norm_sorted_means, sorted_names, all_cell_lines)
-
-    # DONE: cut off non-cancerous MCF10A, MCF10F and MCF12A cancer cell lines
-    # TODO: limit drugs to those approved or in clinical trial phases
-    # TODO: test names cross-match
