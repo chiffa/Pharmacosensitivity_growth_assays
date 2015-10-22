@@ -9,10 +9,12 @@ from chiffatools.dataviz import smooth_histogram
 from chiffatools.Linalg_routines import rm_nans
 import os
 import warnings
+from csv import reader
 warnings.filterwarnings("ignore", category = RuntimeWarning)
 
 
 drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
+drug_info_location = 'C:\\Users\\Andrei\\Desktop\\bc_screen_s5.tsv'
 
 
 def safe_dir_create(path):
@@ -347,6 +349,8 @@ def logistic_regression(TF, T0, concentrations, background_std):
 
 def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator):
 
+
+
     means_accumulator = means_accumulator.tolist()
     errs_accumulator = errs_accumulator.tolist()
     all_cell_lines =  np.sort(all_cell_lines_arr).tolist()
@@ -379,13 +383,71 @@ def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_acc
     names_accumulator = names_accumulator[support]
 
     line_wise_support = np.sum(np.logical_not(np.isnan(means_accumulator)), axis=1)
-    support_filter = line_wise_support > 10
+    cell_lines_support_filter = line_wise_support > 10
 
-    means_accumulator = means_accumulator[support_filter, :]
-    errs_accumulator = errs_accumulator[support_filter, :]
-    all_cell_lines_arr = all_cell_lines_arr[support_filter]
+    ban_list = ['MCF10A', 'MCF10F', 'MCF12A']
+
+    for item in ban_list:
+        idx = all_cell_lines.index(item)
+        cell_lines_support_filter[idx] = False
+
+    means_accumulator = means_accumulator[cell_lines_support_filter, :]
+    errs_accumulator = errs_accumulator[cell_lines_support_filter, :]
+    all_cell_lines_arr = all_cell_lines_arr[cell_lines_support_filter]
+
+    column_wise_support = np.sum(np.logical_not(np.isnan(means_accumulator)), axis=0)
+
+    drugs_support_filter = column_wise_support > 20
+    means_accumulator = means_accumulator[:, drugs_support_filter]
+    errs_accumulator = errs_accumulator[:, drugs_support_filter]
+    names_accumulator = names_accumulator[drugs_support_filter]
 
     return means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator
+
+
+def cross_subname_match(string, list):
+    Translator = {'Tykerb':'Lapatinib',
+                  'Topotecan':'TPT',
+                  'Ispinesib':'SB-715992',
+                  'Gefitinib':'Iressa',
+                  'L-779405':'L779450',
+                  }
+    translator_pad = [substr in string for substr in sorted(Translator.keys())]
+
+    for i, list_string in enumerate(list):
+        if string in list_string:
+            return i
+        if list_string in string:
+            return  i
+        if any([substr in string for substr in Translator.keys()]):
+
+    return None
+
+
+def read_drug_info(drug_array):
+    cropped_drug_array = [drug_name.split(' - ')[0] for drug_name in drug_array]
+    info1 = []
+    info2 = []
+    acc = []
+    non_found = []
+    non_matched = []
+    with open(drug_info_location, 'r') as source_fle:
+        rdr = reader(source_fle, delimiter='\t')
+        rdr.next()
+        for line in rdr:
+            drug_name = line[0]
+            if drug_name in cropped_drug_array:
+                non_found.append(drug_name)
+            elif cross_subname_match(drug_name, cropped_drug_array) is not None:
+                i = cross_subname_match(drug_name, cropped_drug_array)
+                non_found.append(drug_name)
+                non_found.append(cropped_drug_array[i])
+            else:
+                non_matched.append(drug_name)
+    non_found = list(set(cropped_drug_array) - set(non_found))
+    print sorted(non_found)
+    print sorted(non_matched)
+
 
 
 def jensen_shannon_div(x, y): #Jensen-shannon divergence

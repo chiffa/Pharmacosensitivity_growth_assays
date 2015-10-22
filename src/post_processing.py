@@ -366,6 +366,9 @@ def drug_fingerprint(all_cell_lines_arr, means_accumulator, errs_accumulator, na
 
 
 def drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator):
+
+    SF.read_drug_info(names_accumulator)
+
     means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator = SF.preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator)
 
     support_matrix = np.zeros((names_accumulator.shape[0], names_accumulator.shape[0], means_accumulator.shape[0]))
@@ -410,7 +413,7 @@ def drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, na
     support_of_effect = np.sum(np.logical_not(np.isnan(support_matrix)), axis=2)
 
 
-    combined_effect[support_of_effect < 5] = np.median(combined_effect)
+    combined_effect[support_of_effect < 15] = np.median(combined_effect)
 
     sorting_index = hierchical_clustering(combined_effect, names_accumulator)
 
@@ -422,7 +425,7 @@ def drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, na
 
     _names_accumulator = names_accumulator[sorting_index]
 
-    # combined_effect[combined_effect > 1.] = np.nan
+    combined_effect[combined_effect > 0.99] = np.nan
     # combined_effect[combined_effect < 0.1] = np.nan
 
     plt.imshow(combined_effect, cmap='coolwarm', interpolation='nearest')
@@ -430,18 +433,41 @@ def drug_combination(all_cell_lines_arr, means_accumulator, errs_accumulator, na
     plt.xticks(np.linspace(0, _names_accumulator.shape[0]-1, _names_accumulator.shape[0]), _names_accumulator, rotation='vertical')
     plt.yticks(np.linspace(0, _names_accumulator.shape[0]-1, _names_accumulator.shape[0]), _names_accumulator)
 
+    mp.rc('font', size=8)
     plt.subplots_adjust(bottom=0.3)
     plt.show()
 
-    i, j = tuple(reverse_look_up_pad[65, 1, :].tolist())
+    combined_effect[np.isnan(combined_effect)] = 0
 
-    plt.imshow(means_accumulator[:, [i, j]], cmap='coolwarm', interpolation='nearest')
-    plt.colorbar()
-    plt.yticks(np.linspace(0, all_cell_lines_arr.shape[0]-1, all_cell_lines_arr.shape[0]), all_cell_lines_arr)
-    plt.xticks(np.linspace(0, 1, 2), names_accumulator[[i, j]], rotation='vertical')
+    nz = np.nonzero(np.triu(combined_effect))
+    acc_dict = {}
+    for _i, _j in zip(nz[0], nz[1]):
+        acc_dict[(_i, _j)] = combined_effect[_i, _j]
 
-    plt.subplots_adjust(bottom=0.3)
-    plt.show()
+    sort_acc_dict = sorted(acc_dict.iteritems(), key=lambda x: x[1])
+
+    print len(sort_acc_dict)
+
+    for (_i, _j), val in sort_acc_dict[:10]:
+
+        i, j = tuple(reverse_look_up_pad[_i, _j, :].tolist())
+
+        plt.title('combination score: %.2f' % val)
+
+        void_support = np.empty_like(means_accumulator[:, 1])[:, np.newaxis]
+        void_support.fill(np.nan)
+        means_stack = np.hstack((means_accumulator[:, [i, j]],
+                                 void_support,
+                                (means_accumulator[:, i] * means_accumulator[:, j])[:, np.newaxis]))
+        names_stack = names_accumulator[[i, j]].tolist() + ['', 'combined']
+        plt.imshow(means_stack, cmap='coolwarm', interpolation='nearest', vmin=0, vmax=2)
+        plt.colorbar()
+        plt.yticks(np.linspace(0, all_cell_lines_arr.shape[0]-1, all_cell_lines_arr.shape[0]), all_cell_lines_arr)
+        plt.xticks(np.linspace(0, 3, 4), names_stack, rotation='vertical')
+
+        mp.rc('font', size=8)
+        plt.subplots_adjust(bottom=0.3)
+        plt.show()
 
 
 if __name__ == '__main__':
@@ -456,3 +482,7 @@ if __name__ == '__main__':
                                                     names_accumulator, ref_strain='BT483', normalize=True,
                                                     log=True, sort_by='WT_proxy')
     plot_normalized(norm_sorted_means, sorted_names, all_cell_lines)
+
+    # DONE: cut off non-cancerous MCF10A, MCF10F and MCF12A cancer cell lines
+    # TODO: limit drugs to those approved or in clinical trial phases
+    # TODO: test names cross-match
