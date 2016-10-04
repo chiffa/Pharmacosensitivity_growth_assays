@@ -1,5 +1,3 @@
-__author__ = 'Andrei'
-
 import numpy as np
 from supporting_functions import p_stabilize
 from plot_drawings import show_2d_array, quick_hist, correlation_plot

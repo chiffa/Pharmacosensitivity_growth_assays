@@ -1,15 +1,13 @@
-__author__ = 'Andrei'
-
 import numpy as np
 from matplotlib import pyplot as plt
 import matplotlib as mp
 import plot_drawings as PD
 from pickle import load
-from chiffatools.Linalg_routines import gini_coeff
+from chiffatools.linalg_routines import gini_coeff
 from chiffatools.dataviz import smooth_histogram
 from scipy.stats import norm
 import supporting_functions as SF
-from chiffatools.Linalg_routines import hierchical_clustering
+from chiffatools.linalg_routines import hierchical_clustering
 
 memdict = load(open('../analysis_runs/memdict.dmp', 'r'))
 #[drug, cell_line] -> (means, mean errs, unique_concs), (mean_arr, err_arr, unique, T0)

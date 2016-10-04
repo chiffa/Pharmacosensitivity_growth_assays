@@ -1,5 +1,3 @@
-__author__ = 'Andrei'
-
 from readers import raw_data_reader
 from plot_drawings import pretty_gradual_plot
 import matplotlib as mlb
