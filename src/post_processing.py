@@ -66,45 +66,54 @@ def get_concentrations_of_interest(contracted_range=1,
         _25 = np.nanpercentile(means_pad, 25, axis=0)
 
         if contracted_range == 1:
-            selector = np.logical_and(_75 < .9, _25 > 0.1)
-            if any(selector):
-                sel2 = np.argmin(np.sum(np.isnan(means_pad[:, selector]), axis=0))
-                concs_effective_range.append((drug, cell_lines, [unique_c[selector][sel2]],
-                                              means_pad[:, selector][:, sel2][:, np.newaxis],
-                                              errs_pad[:, selector][:, sel2][:, np.newaxis],
-                                              np.nanmean(stasis_pad[:, selector][:, sel2][:, np.newaxis], axis=0)))
+            inhib_int_sel = np.logical_and(_75 < .9, _25 > 0.1)
+            if any(inhib_int_sel):
+                cut_off_2 = np.argmin(np.sum(np.isnan(means_pad[:, inhib_int_sel]), axis=0))
+
+                concs_effective_range.append((drug,
+                                              cell_lines,
+                                              [unique_c[inhib_int_sel][cut_off_2]],
+                                              means_pad[:, inhib_int_sel][:, cut_off_2][:, np.newaxis],
+                                              errs_pad[:, inhib_int_sel][:, cut_off_2][:, np.newaxis],
+                                              np.nanmean(stasis_pad[:, inhib_int_sel][:, cut_off_2][:, np.newaxis], axis=0)))
 
         if contracted_range == 2:
-            # selector = np.logical_and(_25 < .9, _75 > 0.1 )
-            selector = np.nanmedian(stasis_pad, axis=0) > 0.9
-            if any(selector):
-                contractor_pads = contractor_pads[:, selector]
+            inhib_int_sel = np.logical_and(_75 < .9, _25 > 0.1)
+            # inhib_int_sel = np.nanmedian(stasis_pad, axis=0) > 0.9
+            if any(inhib_int_sel):
+                contractor_pads = contractor_pads[:, inhib_int_sel]
                 if not np.all(np.isnan(contractor_pads)):
-                    sel3 = np.int(np.median(np.argmin(contractor_pads, axis=1)))
+                    cut_off_3 = np.int(np.median(np.argmin(contractor_pads, axis=1)))
                 else:
-                    sel3 = 0
-                stasis_super_pad.append(np.nanmean(stasis_pad[:, sel3]))
-                concs_effective_range.append((drug, cell_lines, [unique_c[selector][sel3]],
-                                              means_pad[:, selector][:, sel3][:, np.newaxis],
-                                              errs_pad[:, selector][:, sel3][:, np.newaxis],
-                                              np.nanmean(stasis_pad[:, selector][:, sel3][:, np.newaxis], axis=0)))
+                    cut_off_3 = 0
+                stasis_super_pad.append(np.nanmean(stasis_pad[:, cut_off_3]))
+                concs_effective_range.append((drug,
+                                              cell_lines,
+                                              [unique_c[inhib_int_sel][cut_off_3]],
+                                              means_pad[:, inhib_int_sel][:, cut_off_3][:, np.newaxis],
+                                              errs_pad[:, inhib_int_sel][:, cut_off_3][:, np.newaxis],
+                                              np.nanmean(stasis_pad[:, inhib_int_sel][:, cut_off_3][:, np.newaxis], axis=0)))
 
         if contracted_range == 3:
-            selector = np.logical_and(_75 < .9, _25 > 0.1)
-            if any(selector):
-                sel2 = np.argmin(np.sum(np.isnan(means_pad[:, selector]), axis=0))
-                concs_effective_range.append((drug, cell_lines, [unique_c[selector][sel2]],
-                                              means_pad[:, selector][:, sel2][:, np.newaxis],
-                                              errs_pad[:, selector][:, sel2][:, np.newaxis],
-                                              np.nanmean(stasis_pad[:, selector][:, sel2][:, np.newaxis], axis=0)))
+            inhib_int_sel = np.logical_and(_75 < .9, _25 > 0.1)
+            if any(inhib_int_sel):
+                cut_off_2 = np.argmin(np.sum(np.isnan(means_pad[:, inhib_int_sel]), axis=0))
+                concs_effective_range.append((drug,
+                                              cell_lines,
+                                              [unique_c[inhib_int_sel][cut_off_2]],
+                                              means_pad[:, inhib_int_sel][:, cut_off_2][:, np.newaxis],
+                                              errs_pad[:, inhib_int_sel][:, cut_off_2][:, np.newaxis],
+                                              np.nanmean(stasis_pad[:, inhib_int_sel][:, cut_off_2][:, np.newaxis], axis=0)))
 
         if not contracted_range:
-            selector = np.logical_and(_25 < .9, _75 > 0.1)
-            if any(selector):
-                concs_effective_range.append((drug, cell_lines, unique_c[selector],
-                                              means_pad[:, selector],
-                                              errs_pad[:, selector],
-                                              np.nanmean(stasis_pad[:, selector], axis=0)))
+            inhib_int_sel = np.logical_and(_25 < .9, _75 > 0.1)
+            if any(inhib_int_sel):
+                concs_effective_range.append((drug,
+                                              cell_lines,
+                                              unique_c[inhib_int_sel],
+                                              means_pad[:, inhib_int_sel],
+                                              errs_pad[:, inhib_int_sel],
+                                              np.nanmean(stasis_pad[:, inhib_int_sel], axis=0)))
 
         if contracted_range and contracted_range not in [1, 2, 3]:
             raise Exception('contracted_range value outside [0, 1, 2, 3]')
@@ -165,8 +174,8 @@ def plot_response(_means_accumulator, _errs_accumulator, _all_cell_lines_arr, _n
     #                 np.logical_not(np.isnan(_means_accumulator[idx1])),
     #                 np.logical_not(np.isnan(_means_accumulator[idx2])))
 
-    idx = _all_cell_lines.index(ref_strain)
-    support = np.logical_not(np.isnan(_means_accumulator[idx]))
+    ref_strain_idx = _all_cell_lines.index(ref_strain)
+    support = np.logical_not(np.isnan(_means_accumulator[ref_strain_idx]))
 
     average_stress_intesity = np.nanmean(np.array(_means_accumulator)[:, support], axis=0)
     log_std_stress_intensity = np.nanstd(np.log2(np.array(_means_accumulator)[:, support]), axis=0)
@@ -178,11 +187,11 @@ def plot_response(_means_accumulator, _errs_accumulator, _all_cell_lines_arr, _n
     elif sort_by == 'WT_proxy':
         argsorter = np.argsort(np.array(_means_accumulator)[:, support][-1, :])
     elif sort_by == 'ref_strain':
-        argsorter = np.argsort(np.array(_means_accumulator)[:, support][idx, :])
+        argsorter = np.argsort(np.array(_means_accumulator)[:, support][ref_strain_idx, :])
     else:
         argsorter = np.argsort(average_stress_intesity)
 
-    average_stress_intesity = average_stress_intesity[argsorter]
+    average_stress_intensity = average_stress_intesity[argsorter]
     log_std_stress_intensity = log_std_stress_intensity[argsorter]
     std_stress_intensity = np.nanstd(np.array(_means_accumulator)[:, support], axis=0)
 
@@ -216,7 +225,7 @@ def plot_response(_means_accumulator, _errs_accumulator, _all_cell_lines_arr, _n
             means_array = np.log2(means_array)
             errs_array = np.log2(1+errs_array)
 
-        if i == idx:
+        if i == ref_strain_idx:
             plt.errorbar(ramp,
                          means_array,
                          yerr=errs_array,
@@ -298,7 +307,7 @@ def plot_response(_means_accumulator, _errs_accumulator, _all_cell_lines_arr, _n
     plt.show()
 
     _means_accumulator = np.array(_means_accumulator)
-    baseline = _means_accumulator[idx, :][support][argsorter][np.newaxis, :]
+    baseline = _means_accumulator[ref_strain_idx, :][support][argsorter][np.newaxis, :]
     _norm_sorted_means = _means_accumulator[:, support][:, argsorter] / baseline
     _sorted_names = np.array(_names_accumulator)[support][argsorter]
 
@@ -489,7 +498,7 @@ def drug_combination(_all_cell_lines_arr, _means_accumulator, _errs_accumulator,
 
 if __name__ == '__main__':
 
-    all_cell_lines, concs_effective_range = get_concentrations_of_interest(contracted_range=1,
+    all_cell_lines, concs_effective_range = get_concentrations_of_interest(contracted_range=2,
                                                                            err_silencing=False)
     all_cell_lines_arr, means_accumulator,\
         errs_accumulator, names_accumulator = stack_data_in_range_of_interest(concs_effective_range)
@@ -501,8 +510,9 @@ if __name__ == '__main__':
                                                     all_cell_lines_arr,
                                                     names_accumulator,
                                                     ref_strain='BT483',
+                                                    # ref_strain='WT_proxy',
                                                     normalize=False,
                                                     log=False,
-                                                    sort_by='WT_proxy')
+                                                    sort_by='ref_strain')
 
     plot_normalized(norm_sorted_means, sorted_names, all_cell_lines)
