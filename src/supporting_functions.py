@@ -7,7 +7,7 @@ from chiffatools.linalg_routines import rm_nans
 import os
 import warnings
 from csv import reader
-warnings.filterwarnings("ignore", category = RuntimeWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
@@ -19,16 +19,16 @@ def safe_dir_create(path):
         os.makedirs(path)
 
 
-def index(myset):
-    return dict((elt, i) for i, elt in enumerate(myset))
+def index(my_set):
+    return dict((elt, i) for i, elt in enumerate(my_set))
 
 
-def broadcast(subline):
-    if len(subline) !=30:
-        print subline
-        raise Exception('wrong number of items in subline')
+def broadcast(sub_line):
+    if len(sub_line) != 30:
+        print sub_line
+        raise Exception('wrong number of items in sub_line')
     else:
-        arr = np.array(subline)
+        arr = np.array(sub_line)
         return arr.reshape((10, 3))
 
 
@@ -48,8 +48,8 @@ def make_comparator(percentile_5_range):
 
 def lgi(lst, index_list):
     """
-    List get indexes: recovers indexes in the list in the provided index list and returns the result in the form of an
-    array
+    List get indexes: recovers indexes in the list in the provided index list and returns the
+    result in the form of an array
 
     :param lst:
     :param index_list:
@@ -66,17 +66,18 @@ def p_stabilize(array, percentile):
     return array
 
 
-def get_boundary_correction(TF, background_std):
+def get_boundary_correction(tf, background_std):
 
     def surviving_fraction(_float):
         return np.ceil(norm.sf(0, _float, background_std)*background_std*1.96)
 
     surviving_fraction = np.vectorize(surviving_fraction)
-    violating_TF_mask = TF < background_std*1.96
-    if np.any(violating_TF_mask):
-        TF[violating_TF_mask] = surviving_fraction(TF[violating_TF_mask])
+    violating_tf_mask = tf < background_std * 1.96
 
-    return TF
+    if np.any(violating_tf_mask):
+        tf[violating_tf_mask] = surviving_fraction(tf[violating_tf_mask])
+
+    return tf
 
 
 def get_relative_growth(raw_values, initial, std):
@@ -88,10 +89,13 @@ def get_relative_growth(raw_values, initial, std):
 
 
 def get_t_distro_outlier_bound_estimation(array, background_std):
-    narray = rm_nans(array)
+    nums_only_array = rm_nans(array)
 
-    low, up = t.interval(0.95, narray.shape[0]-1, np.mean(narray), np.sqrt(np.var(narray)+background_std**2))
-    up, low = (up-np.mean(narray), np.mean(narray)-low)
+    low, up = t.interval(0.95,
+                         nums_only_array.shape[0]-1,
+                         np.mean(nums_only_array),
+                         np.sqrt(np.var(nums_only_array)+background_std**2))
+    up, low = (up-np.mean(nums_only_array), np.mean(nums_only_array)-low)
 
     return max(up, low)
 
@@ -122,7 +126,7 @@ def clean_tri_replicates(points, std_of_tools):
     return points
 
 
-def C0_correction(value_set):
+def c0_correction(value_set):
     for i in range(0, value_set.shape[0]):
         if not np.all(np.isnan(value_set)):
             value_set[i, :, :] /= np.nanmean(value_set[i, 0, :])
@@ -132,7 +136,6 @@ def C0_correction(value_set):
 def compute_stats(values, concentrations, background_std, clean=True):
 
     def preprocess_concentrations():
-
         u_concentrations = np.unique(concentrations)[1:]
 
         re_concentrations = np.log(u_concentrations)
@@ -141,6 +144,7 @@ def compute_stats(values, concentrations, background_std, clean=True):
 
         msk = np.array((backbone < _5_p).nonzero()).T
         collapse = []
+
         for i, j in msk.tolist():
             if i > j:
                 collapse.append((u_concentrations[i], u_concentrations[j]))
@@ -148,22 +152,20 @@ def compute_stats(values, concentrations, background_std, clean=True):
         for c1, c2 in collapse:
             concentrations[concentrations == c2] = c1
 
-
     preprocess_concentrations()
-
     unique_values = np.unique(concentrations)
 
     means = np.zeros_like(unique_values)
     errs = np.zeros_like(unique_values)
     stds = np.zeros_like(unique_values)
     freedom_degs = np.zeros_like(unique_values)
+
     for i, val in enumerate(unique_values):
         mask = concentrations == val
         vals = rm_nans(values[:, mask, :])
         means[i] = np.mean(vals)
         stds[i] = np.sqrt(np.std(vals)**2 + background_std**2)
         freedom_degs[i] = np.max((vals.shape[0] - 1, 1))
-        # errs[i] = stds[i]/np.sqrt(freedom_degs[i])
         errs[i] = get_t_distro_outlier_bound_estimation(vals, background_std)/freedom_degs[i]
 
     return means, errs, stds, freedom_degs, unique_values
@@ -216,7 +218,7 @@ def correct_plates(plate_stack, concentrations, std_of_tools,
     :param std_of_tools:
     :return:
     """
-    re_plate_stack =  []
+    re_plate_stack = []
     means_stack = []
     errs_stack = []
     unique_concs_stack = []
@@ -224,7 +226,7 @@ def correct_plates(plate_stack, concentrations, std_of_tools,
     ghost = np.empty_like(plate_stack[0, :, :])
     ghost.fill(np.nan)
 
-        # removal of outliers in triplicates have to be performed first because they affect stds
+    # removal of outliers in triplicates have to be performed first because they affect stds
     if replicate_cleaning:
         np.apply_along_axis(clean_tri_replicates, 2, plate_stack, std_of_tools)
 
@@ -325,28 +327,26 @@ def combine(plate_stack, concentrations, std_of_tools_vector):
     return means, errs, unique_concs
 
 
-def logistic_regression(TF, T0, concentrations, background_std):
+def logistic_regression(tf, t0, concentrations, background_std):
 
     def get_1p_bounds(mean, std, dof):
         return t.interval(0.99, dof, mean, std)
 
     mask = concentrations == 0.0
-    vals_at_0 = rm_nans(TF[:, mask, :])
-    max_capacity = get_1p_bounds(np.mean(vals_at_0),
-                                 np.sqrt(np.var(vals_at_0) + background_std**2),
-                                 vals_at_0.shape[0])[1]*1.05
+    vals_at_conc_0 = rm_nans(tf[:, mask, :])
+    max_capacity = get_1p_bounds(np.mean(vals_at_conc_0),
+                                 np.sqrt(np.var(vals_at_conc_0) + background_std**2),
+                                 vals_at_conc_0.shape[0])[1]*1.05
 
-    compensation_T0 = -np.log2(max_capacity/T0-1)[:, :, np.newaxis]
-    compensation_TF = -np.log2(max_capacity/TF-1)
+    compensation_t0 = -np.log2(max_capacity / t0 - 1)[:, :, np.newaxis]
+    compensation_tf = -np.log2(max_capacity / tf - 1)
 
-    alphas = compensation_TF - compensation_T0
+    alphas = compensation_tf - compensation_t0
 
     return alphas
 
 
 def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator):
-
-
 
     means_accumulator = means_accumulator.tolist()
     errs_accumulator = errs_accumulator.tolist()
@@ -355,12 +355,12 @@ def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_acc
     idx1 = all_cell_lines.index('184A1')
     idx2 = all_cell_lines.index('184B5')
 
-    mean_for_proxy_WT = np.nanmean(np.array(means_accumulator)[[idx1, idx2], :], axis=0)
-    errs_for_proxy_WT = np.nanmean(np.array(errs_accumulator)[[idx1, idx2], :], axis=0)
+    mean_for_proxy_wt = np.nanmean(np.array(means_accumulator)[[idx1, idx2], :], axis=0)
+    errs_for_proxy_wt = np.nanmean(np.array(errs_accumulator)[[idx1, idx2], :], axis=0)
 
     all_cell_lines.append('WT_proxy')
-    means_accumulator.append(mean_for_proxy_WT.tolist())
-    errs_accumulator.append(errs_for_proxy_WT.tolist())
+    means_accumulator.append(mean_for_proxy_wt.tolist())
+    errs_accumulator.append(errs_for_proxy_wt.tolist())
 
     means_accumulator = np.array(means_accumulator)
     errs_accumulator = np.array(errs_accumulator)
@@ -403,11 +403,11 @@ def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_acc
 
 
 def cross_subname_match(my_string, list):
-    translator = {'Tykerb':'Lapatinib',
-                  'Topotecan':'TPT',
-                  'Ispinesib':'SB-715992',
-                  'Gefitinib':'Iressa',
-                  'L-779405':'L779450',
+    translator = {'Tykerb': 'Lapatinib',
+                  'Topotecan': 'TPT',
+                  'Ispinesib': 'SB-715992',
+                  'Gefitinib': 'Iressa',
+                  'L-779405': 'L779450',
                   }
     # print my_string
     for key, value in translator.iteritems():
@@ -419,7 +419,7 @@ def cross_subname_match(my_string, list):
         if my_string in list_string:
             return i
         if list_string in my_string:
-            return  i
+            return i
 
     return None
 
@@ -446,7 +446,8 @@ def read_drug_info(drug_array):
     return targets, FDA_status
 
 
-def jensen_shannon_div(x, y): #Jensen-shannon divergence
+# Jensen-shannon divergence
+def jensen_shannon_div(x, y):
     # @author: jonathanfriedman
     x = np.array(x)
     y = np.array(y)
