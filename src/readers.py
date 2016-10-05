@@ -267,7 +267,7 @@ def fragmented_round(cell_line, drug, color='black', plot_type=10, injected_anch
     if not np.any(clean_mask):
         return plot_touched, (None, None, None), (None, None, None, None)
 
-    tf_corrected, T0_corrected = (tf_corrected[clean_mask, :, :], t0_median[clean_mask, :])
+    tf_corrected, t0_corrected = (tf_corrected[clean_mask, :, :], t0_median[clean_mask, :])
     means_arr, errs_arr = (means_arr[clean_mask, :], errs_arr[clean_mask, :])
     saved_means_arr, saved_errs_arr = means_arr.copy(), errs_arr.copy()
 
@@ -277,7 +277,7 @@ def fragmented_round(cell_line, drug, color='black', plot_type=10, injected_anch
         norm_factor = supporting_functions.retrieve_normalization_factor(means_arr)
 
     if normalization_type == 1:
-        norm_factor = supporting_functions.retrieve_normalization_factor(T0_corrected)
+        norm_factor = supporting_functions.retrieve_normalization_factor(t0_corrected)
 
     norm_plate, norm_means, norm_errs, norm_std_of_tools =\
         supporting_functions.normalize(tf_corrected, means_arr, errs_arr, hr.std_of_tools, norm_factor)
@@ -294,7 +294,7 @@ def fragmented_round(cell_line, drug, color='black', plot_type=10, injected_anch
         plot_drawings.summary_plot(means, errs, unique_concs, anchor, color=color)
         # plt.show()
 
-    norm_factor = supporting_functions.retrieve_normalization_factor(T0_corrected)
+    norm_factor = supporting_functions.retrieve_normalization_factor(t0_corrected)
     norm_plate, norm_means, norm_errs, norm_std_of_tools =\
         supporting_functions.normalize(tf_corrected, saved_means_arr, saved_errs_arr, hr.std_of_tools, norm_factor)
 
@@ -400,5 +400,5 @@ if __name__ == "__main__":
 
     # graphics_loop(30)
     computational_loop(40)
-    # 1x-3x = debug render; 4x - no debug render;
+    # 1x-3x = various debug renders; 4x - no debug render;
     # x1 - no normalization; x0 - normalize to starting

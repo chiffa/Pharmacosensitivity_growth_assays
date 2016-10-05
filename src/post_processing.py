@@ -206,11 +206,11 @@ def plot_response(_means_accumulator, _errs_accumulator, _all_cell_lines_arr, _n
     ln = len(_all_cell_lines)
     for i, cell_line in enumerate(_all_cell_lines):
         if normalize:
-            means_array = np.array(_means_accumulator[i])[support][argsorter] / average_stress_intesity
+            means_array = (np.array(_means_accumulator[i])[support] / average_stress_intesity)[argsorter]
+            errs_array = (np.array(_errs_accumulator[i])[support] / average_stress_intesity)[argsorter]
         else:
             means_array = np.array(_means_accumulator[i])[support][argsorter]
-
-        errs_array = np.array(_errs_accumulator[i])[support][argsorter]
+            errs_array = np.array(_errs_accumulator[i])[support][argsorter]
 
         g_coeff = gini_coeff(means_array)
         support_size = np.sum(np.logical_not(np.isnan(np.array(_means_accumulator[i]))))
@@ -250,17 +250,17 @@ def plot_response(_means_accumulator, _errs_accumulator, _all_cell_lines_arr, _n
         std_stress_intensity = log_std_stress_intensity
 
     plt.plot(ramp,
-             average_stress_intesity,
+             average_stress_intesity[argsorter],
              color='r',
              label='%s - %.2f - %s' % ('average', mean_g_coeff, argsorter.shape[0])
              )
 
     plt.plot(ramp,
-             average_stress_intesity + std_stress_intensity,
+             (average_stress_intesity + std_stress_intensity)[argsorter],
              color='g')
 
     plt.plot(ramp,
-             average_stress_intesity - std_stress_intensity,
+             (average_stress_intesity - std_stress_intensity)[argsorter],
              color='g')
 
     mp.rc('font', size=10)
