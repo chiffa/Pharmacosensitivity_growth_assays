@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import matplotlib as mp
 import plot_drawings as PD
 from pickle import load
-from chiffatools.Linalg_routines import gini_coeff
+from chiffatools.linalg_routines import gini_coeff
 from chiffatools.dataviz import smooth_histogram
 
 memdict = load(open('../analysis_runs/memdict.dmp', 'r'))

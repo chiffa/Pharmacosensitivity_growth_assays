@@ -1,7 +1,7 @@
 __author__ = 'Andrei'
 
 import numpy as np
-from chiffatools.Linalg_routines import rm_nans
+from chiffatools.linalg_routines import rm_nans
 from scipy.stats import t, norm
 from scipy.spatial.distance import pdist, squareform
 from matplotlib import pyplot as plt

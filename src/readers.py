@@ -5,7 +5,7 @@ from csv import reader
 from os import path
 from pprint import pprint
 import numpy as np
-from chiffatools.Linalg_routines import rm_nans
+from chiffatools.linalg_routines import rm_nans
 import supporting_functions as SF
 import plot_drawings as PD
 from plot_drawings import quick_hist, show_2d_array, correlation_plot, raw_plot, summary_plot

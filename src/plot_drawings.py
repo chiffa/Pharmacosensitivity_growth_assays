@@ -2,7 +2,7 @@ __author__ = 'Andrei'
 
 import numpy as np
 from matplotlib import pyplot as plt
-from chiffatools.Linalg_routines import rm_nans
+from chiffatools.linalg_routines import rm_nans
 from chiffatools.dataviz import better2D_desisty_plot
 import supporting_functions as SF
 from scipy import stats
