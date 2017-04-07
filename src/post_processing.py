@@ -190,7 +190,7 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
     triple_negative = ['BT20', 'BT549', 'HCC1143', 'HCC1187', 'HCC1395', 'HCC1599', 'HCC1806', 'HCC1937', 'HCC2185',
         'HCC3153', 'HCC38', 'HCC70', 'HS578T', 'MDAMB157', 'MDAMB231', 'MDAMB436', 'MDAMB468', 'SUM102PT', 'SUM52PE']
 
-    WT_proxy = ['184A1', '184B5']
+    WT_proxy = ['184A1', '184B5', 'WT_proxy']
 
     ref_cell_line = ['BT483']
 
@@ -217,6 +217,7 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
 
     plt.xlabel('gini coefficient')
     plt.ylabel('average fitness across conditions')
+    plt.axis([0, 1, 0, 1])
     plt.legend(ncol=2)
     plt.show()
 
@@ -251,6 +252,10 @@ def method4(norm_sorted_means, sorted_names, all_cell_lines):
     accumulator = np.array(accumulator)
     means = np.nanmean(accumulator, axis=0)
     stds = np.nanstd(accumulator, axis=0)
+
+    with open('BC_analysis.csv', 'wb') as target:
+        for mean, std in zip(means.tolist(), stds.tolist()):
+            target.write('%s,%s\n' % (mean, std))
 
     plt.plot(ramp, means, label='mean')
     plt.plot(ramp, stds, label='stds')
