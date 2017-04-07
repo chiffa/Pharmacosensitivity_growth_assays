@@ -1,17 +1,13 @@
+__author__ = 'Andrei'
+
 import numpy as np
+from chiffatools.linalg_routines import rm_nans
 from scipy.stats import t, norm
 from scipy.spatial.distance import pdist, squareform
 from matplotlib import pyplot as plt
-from chiffatools.dataviz import smooth_histogram
-from chiffatools.linalg_routines import rm_nans
 import os
-import warnings
-from csv import reader
-warnings.filterwarnings("ignore", category=RuntimeWarning)
-
 
 drug_c_array = np.array([0]+[2**_i for _i in range(0, 9)])*0.5**8
-drug_info_location = 'C:\\Users\\Andrei\\Desktop\\bc_screen_s5.tsv'
 
 
 def safe_dir_create(path):
@@ -19,16 +15,16 @@ def safe_dir_create(path):
         os.makedirs(path)
 
 
-def index(my_set):
-    return dict((elt, i) for i, elt in enumerate(my_set))
+def index(myset):
+    return dict((elt, i) for i, elt in enumerate(myset))
 
 
-def broadcast(sub_line):
-    if len(sub_line) != 30:
-        print sub_line
-        raise Exception('wrong number of items in sub_line')
+def broadcast(subline):
+    if len(subline) !=30:
+        print subline
+        raise Exception('wrong number of items in subline')
     else:
-        arr = np.array(sub_line)
+        arr = np.array(subline)
         return arr.reshape((10, 3))
 
 
@@ -48,8 +44,8 @@ def make_comparator(percentile_5_range):
 
 def lgi(lst, index_list):
     """
-    List get indexes: recovers indexes in the list in the provided index list and returns the
-    result in the form of an array
+    List get indexes: recovers indexes in the list in the provided index list and returns the result in the form of an
+    array
 
     :param lst:
     :param index_list:
@@ -66,18 +62,17 @@ def p_stabilize(array, percentile):
     return array
 
 
-def get_boundary_correction(tf, background_std):
+def get_boundary_correction(TF, background_std):
 
     def surviving_fraction(_float):
         return np.ceil(norm.sf(0, _float, background_std)*background_std*1.96)
 
     surviving_fraction = np.vectorize(surviving_fraction)
-    violating_tf_mask = tf < background_std * 1.96
+    violating_TF_mask = TF < background_std*1.96
+    if np.any(violating_TF_mask):
+        TF[violating_TF_mask] = surviving_fraction(TF[violating_TF_mask])
 
-    if np.any(violating_tf_mask):
-        tf[violating_tf_mask] = surviving_fraction(tf[violating_tf_mask])
-
-    return tf
+    return TF
 
 
 def get_relative_growth(raw_values, initial, std):
@@ -89,13 +84,10 @@ def get_relative_growth(raw_values, initial, std):
 
 
 def get_t_distro_outlier_bound_estimation(array, background_std):
-    nums_only_array = rm_nans(array)
+    narray = rm_nans(array)
 
-    low, up = t.interval(0.95,
-                         nums_only_array.shape[0]-1,
-                         np.mean(nums_only_array),
-                         np.sqrt(np.var(nums_only_array)+background_std**2))
-    up, low = (up-np.mean(nums_only_array), np.mean(nums_only_array)-low)
+    low, up = t.interval(0.95, narray.shape[0]-1, np.mean(narray), np.sqrt(np.var(narray)+background_std**2))
+    up, low = (up-np.mean(narray), np.mean(narray)-low)
 
     return max(up, low)
 
@@ -126,7 +118,7 @@ def clean_tri_replicates(points, std_of_tools):
     return points
 
 
-def c0_correction(value_set):
+def C0_correction(value_set):
     for i in range(0, value_set.shape[0]):
         if not np.all(np.isnan(value_set)):
             value_set[i, :, :] /= np.nanmean(value_set[i, 0, :])
@@ -136,6 +128,7 @@ def c0_correction(value_set):
 def compute_stats(values, concentrations, background_std, clean=True):
 
     def preprocess_concentrations():
+
         u_concentrations = np.unique(concentrations)[1:]
 
         re_concentrations = np.log(u_concentrations)
@@ -144,7 +137,6 @@ def compute_stats(values, concentrations, background_std, clean=True):
 
         msk = np.array((backbone < _5_p).nonzero()).T
         collapse = []
-
         for i, j in msk.tolist():
             if i > j:
                 collapse.append((u_concentrations[i], u_concentrations[j]))
@@ -152,20 +144,22 @@ def compute_stats(values, concentrations, background_std, clean=True):
         for c1, c2 in collapse:
             concentrations[concentrations == c2] = c1
 
+
     preprocess_concentrations()
+
     unique_values = np.unique(concentrations)
 
     means = np.zeros_like(unique_values)
     errs = np.zeros_like(unique_values)
     stds = np.zeros_like(unique_values)
     freedom_degs = np.zeros_like(unique_values)
-
     for i, val in enumerate(unique_values):
         mask = concentrations == val
         vals = rm_nans(values[:, mask, :])
         means[i] = np.mean(vals)
         stds[i] = np.sqrt(np.std(vals)**2 + background_std**2)
         freedom_degs[i] = np.max((vals.shape[0] - 1, 1))
+        # errs[i] = stds[i]/np.sqrt(freedom_degs[i])
         errs[i] = get_t_distro_outlier_bound_estimation(vals, background_std)/freedom_degs[i]
 
     return means, errs, stds, freedom_degs, unique_values
@@ -218,7 +212,7 @@ def correct_plates(plate_stack, concentrations, std_of_tools,
     :param std_of_tools:
     :return:
     """
-    re_plate_stack = []
+    re_plate_stack =  []
     means_stack = []
     errs_stack = []
     unique_concs_stack = []
@@ -226,7 +220,7 @@ def correct_plates(plate_stack, concentrations, std_of_tools,
     ghost = np.empty_like(plate_stack[0, :, :])
     ghost.fill(np.nan)
 
-    # removal of outliers in triplicates have to be performed first because they affect stds
+        # removal of outliers in triplicates have to be performed first because they affect stds
     if replicate_cleaning:
         np.apply_along_axis(clean_tri_replicates, 2, plate_stack, std_of_tools)
 
@@ -327,133 +321,20 @@ def combine(plate_stack, concentrations, std_of_tools_vector):
     return means, errs, unique_concs
 
 
-def logistic_regression(tf, t0, concentrations, background_std):
+def logistic_regression(TF, T0, concentrations, background_std):
 
     def get_1p_bounds(mean, std, dof):
         return t.interval(0.99, dof, mean, std)
 
     mask = concentrations == 0.0
-    vals_at_conc_0 = rm_nans(tf[:, mask, :])
-    max_capacity = get_1p_bounds(np.mean(vals_at_conc_0),
-                                 np.sqrt(np.var(vals_at_conc_0) + background_std**2),
-                                 vals_at_conc_0.shape[0])[1]*1.05
+    vals_at_0 = rm_nans(TF[:, mask, :])
+    max_capacity = get_1p_bounds(np.mean(vals_at_0),
+                                 np.sqrt(np.var(vals_at_0) + background_std**2),
+                                 vals_at_0.shape[0])[1]*1.05
 
-    compensation_t0 = -np.log2(max_capacity / t0 - 1)[:, :, np.newaxis]
-    compensation_tf = -np.log2(max_capacity / tf - 1)
+    compensation_T0 = -np.log2(max_capacity/T0-1)[:, :, np.newaxis]
+    compensation_TF = -np.log2(max_capacity/TF-1)
 
-    alphas = compensation_tf - compensation_t0
+    alphas = compensation_TF - compensation_T0
 
     return alphas
-
-
-def preformat(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator):
-
-    means_accumulator = means_accumulator.tolist()
-    errs_accumulator = errs_accumulator.tolist()
-    all_cell_lines =  np.sort(all_cell_lines_arr).tolist()
-
-    idx1 = all_cell_lines.index('184A1')
-    idx2 = all_cell_lines.index('184B5')
-
-    mean_for_proxy_wt = np.nanmean(np.array(means_accumulator)[[idx1, idx2], :], axis=0)
-    errs_for_proxy_wt = np.nanmean(np.array(errs_accumulator)[[idx1, idx2], :], axis=0)
-
-    all_cell_lines.append('WT_proxy')
-    means_accumulator.append(mean_for_proxy_wt.tolist())
-    errs_accumulator.append(errs_for_proxy_wt.tolist())
-
-    means_accumulator = np.array(means_accumulator)
-    errs_accumulator = np.array(errs_accumulator)
-    support = np.logical_not(np.isnan(means_accumulator[-1, :]))
-    names_accumulator = np.array(names_accumulator)
-    all_cell_lines_arr = np.array(all_cell_lines)
-
-    tmp_calc = rm_nans(means_accumulator)
-    q1 = np.percentile(tmp_calc, 25)
-    q3 = np.percentile(tmp_calc, 75)
-    ub = q3 + (q3-q1)*1.5
-    means_accumulator[means_accumulator > ub] = np.nan
-    errs_accumulator[means_accumulator > ub] = np.nan
-
-    means_accumulator = means_accumulator[:, support]
-    errs_accumulator =  errs_accumulator[:, support]
-    names_accumulator = names_accumulator[support]
-
-    line_wise_support = np.sum(np.logical_not(np.isnan(means_accumulator)), axis=1)
-    cell_lines_support_filter = line_wise_support > 10
-
-    ban_list = ['MCF10A', 'MCF10F', 'MCF12A']
-
-    for item in ban_list:
-        idx = all_cell_lines.index(item)
-        cell_lines_support_filter[idx] = False
-
-    means_accumulator = means_accumulator[cell_lines_support_filter, :]
-    errs_accumulator = errs_accumulator[cell_lines_support_filter, :]
-    all_cell_lines_arr = all_cell_lines_arr[cell_lines_support_filter]
-
-    column_wise_support = np.sum(np.logical_not(np.isnan(means_accumulator)), axis=0)
-
-    drugs_support_filter = column_wise_support > 20
-    means_accumulator = means_accumulator[:, drugs_support_filter]
-    errs_accumulator = errs_accumulator[:, drugs_support_filter]
-    names_accumulator = names_accumulator[drugs_support_filter]
-
-    return means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator
-
-
-def cross_subname_match(my_string, list):
-    translator = {'Tykerb': 'Lapatinib',
-                  'Topotecan': 'TPT',
-                  'Ispinesib': 'SB-715992',
-                  'Gefitinib': 'Iressa',
-                  'L-779405': 'L779450',
-                  }
-    # print my_string
-    for key, value in translator.iteritems():
-        if value in my_string:
-            my_string = my_string.replace(value, key, 1)
-            break
-
-    for i, list_string in enumerate(list):
-        if my_string in list_string:
-            return i
-        if list_string in my_string:
-            return i
-
-    return None
-
-
-def read_drug_info(drug_array):
-    cropped_drug_array = [drug_name.split(' - ')[0] for drug_name in drug_array]
-    targets = np.zeros_like(np.array(cropped_drug_array)).astype(np.string_)
-    FDA_status = np.zeros_like(np.array(cropped_drug_array)).astype(np.string_)
-    with open(drug_info_location, 'r') as source_fle:
-        rdr = reader(source_fle, delimiter='\t')
-        rdr.next()
-        for line in rdr:
-            drug_name = line[0]
-            if drug_name in cropped_drug_array:
-                i = cropped_drug_array.index(drug_name)
-            elif cross_subname_match(drug_name, cropped_drug_array) is not None:
-                i = cross_subname_match(drug_name, cropped_drug_array)
-            else:
-                i = -1
-            if i >= 0:
-                targets[i] = line[1]
-                FDA_status[i] = line[2]
-
-    return targets, FDA_status
-
-
-# Jensen-shannon divergence
-def jensen_shannon_div(x, y):
-    # @author: jonathanfriedman
-    x = np.array(x)
-    y = np.array(y)
-    d1 = x*np.log2(2*x/(x+y))
-    d2 = y*np.log2(2*y/(x+y))
-    d1[np.isnan(d1)] = 0
-    d2[np.isnan(d2)] = 0
-    d = 0.5*np.sum(d1+d2)
-    return d
