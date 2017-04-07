@@ -98,7 +98,7 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
     idx2 = all_cell_lines.index('184B5')
 
     mean_for_proxy_WT = np.nanmean(np.array(means_accumulator)[[idx1, idx2], :], axis=0)
-    errs_for_proxy_WT = np.nanmean(np.array(errs_accumulator)[[idx1, idx2],:], axis=0)
+    errs_for_proxy_WT = np.nanmean(np.array(errs_accumulator)[[idx1, idx2], :], axis=0)
 
     all_cell_lines.append('WT_proxy')
     means_accumulator.append(mean_for_proxy_WT.tolist())
@@ -151,14 +151,14 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
             plt.errorbar(ramp,
                          means_array,
                          yerr=errs_array,
-                         label='%s - %.2f - %s'%(cell_line, g_coeff, support_size),
+                         label='%s - %.2f - %s' % (cell_line, g_coeff, support_size),
                          color='k')
 
         else:
             plt.errorbar(ramp,
                          means_array,
                          yerr=errs_array,
-                         fmt='.', label='%s - %.2f - %s'%(cell_line, g_coeff, support_size),
+                         fmt='.', label='%s - %.2f - %s' % (cell_line, g_coeff, support_size),
                          color=cmap(i/float(ln)))
 
     mean_g_coeff = gini_coeff(np.array(average_stress_intesity))
@@ -172,14 +172,14 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
 
     plt.plot(ramp,
              average_stress_intesity,
-             color = 'r',
-             label = '%s - %.2f - %s'%('average', mean_g_coeff , argsorter.shape[0]))
+             color='r',
+             label='%s - %.2f - %s' % ('average', mean_g_coeff , argsorter.shape[0]))
     plt.plot(ramp,
              average_stress_intesity+std_stress_intensity,
-             color = 'g')
+             color='g')
     plt.plot(ramp,
              average_stress_intesity-std_stress_intensity,
-             color = 'g')
+             color='g')
 
     mp.rc('font', size=10)
     plt.xticks(ramp, np.array(names_accumulator)[support][argsorter], rotation='vertical')
@@ -190,7 +190,9 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
     triple_negative = ['BT20', 'BT549', 'HCC1143', 'HCC1187', 'HCC1395', 'HCC1599', 'HCC1806', 'HCC1937', 'HCC2185',
         'HCC3153', 'HCC38', 'HCC70', 'HS578T', 'MDAMB157', 'MDAMB231', 'MDAMB436', 'MDAMB468', 'SUM102PT', 'SUM52PE']
 
+    WT_proxy = ['184A1', '184B5']
 
+    ref_cell_line = ['BT483']
 
     for i, cell_line in enumerate(all_cell_lines):
         support_size = np.sum(np.logical_not(np.isnan(np.array(means_accumulator[i]))))
@@ -199,14 +201,19 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
         g_coeff = gini_coeff(means_array)
 
         if support_size > 15:
-            if cell_line in triple_negative:
+            if cell_line in ref_cell_line:
                 plt.plot([g_coeff], [mean_fit],
-                     'o', color = 'r',
-                     label='%s g: %.2f af: %.2f s: %s' % (cell_line, g_coeff, mean_fit, support_size))
+                     'o', color='r',
+                     label='%s' % (cell_line))
+
+            elif cell_line in WT_proxy:
+                plt.plot([g_coeff], [mean_fit],
+                     'o', color='g',
+                     label='%s' % (cell_line))
+
             else:
                 plt.plot([g_coeff], [mean_fit],
-                     'o', color = 'k',
-                     label='%s g: %.2f af: %.2f s: %s' % (cell_line, g_coeff, mean_fit, support_size))
+                     'o', color='k')
 
     plt.xlabel('gini coefficient')
     plt.ylabel('average fitness across conditions')
@@ -246,7 +253,7 @@ def method4(norm_sorted_means, sorted_names, all_cell_lines):
     stds = np.nanstd(accumulator, axis=0)
 
     plt.plot(ramp, means, label='mean')
-    plt.plot(ramp, stds, label = 'stds')
+    plt.plot(ramp, stds, label='stds')
 
     mp.rc('font', size=10)
     plt.xticks(ramp, sorted_names, rotation='vertical')
