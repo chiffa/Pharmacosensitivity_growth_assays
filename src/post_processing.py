@@ -81,7 +81,8 @@ def stack_data_in_range_of_interest(concs_effective_range):
 
     return all_cell_lines_arr, means_accumulator, errs_accumulator, names_accumulator
 
-def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='BT483', normalize=False, log=True):
+def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator,
+            ref_strain='BT483', normalize=False, log=False):
 
     # method 3 & plotting
     means_accumulator = np.hstack(tuple(means_accumulator))
@@ -93,7 +94,7 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
     all_cell_lines = all_cell_lines.tolist()
 
 
-    idx = all_cell_lines.index(ref_strain)
+    ref_idx = all_cell_lines.index(ref_strain)
     idx1 = all_cell_lines.index('184A1')
     idx2 = all_cell_lines.index('184B5')
 
@@ -108,20 +109,21 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
     #                 np.logical_not(np.isnan(means_accumulator[idx1])),
     #                 np.logical_not(np.isnan(means_accumulator[idx2])))
 
-    support = np.logical_not(np.isnan(means_accumulator[idx]))
+    support = np.logical_not(np.isnan(means_accumulator[ref_idx]))
 
     average_stress_intesity = np.nanmean(np.array(means_accumulator)[:, support], axis=0)
     log_std_stress_intensity = np.nanstd(np.log2(np.array(means_accumulator)[:, support]), axis=0)
     std_stress_intensity = np.nanstd(np.array(means_accumulator)[:, support], axis=0)
     # argsorter = np.argsort(mean_for_proxy_WT[support]/average_stress_intesity)
-    argsorter = np.argsort(average_stress_intesity)
+    argsorter = np.argsort(average_stress_intesity)[::-1]
 
     average_stress_intesity = average_stress_intesity[argsorter]
     log_std_stress_intensity = log_std_stress_intensity[argsorter]
     std_stress_intensity = np.nanstd(np.array(means_accumulator)[:, support], axis=0)
 
     ramp = np.linspace(0, argsorter.shape[0], argsorter.shape[0]).tolist()
-    cmap = mp.cm.get_cmap(name='Paired')
+    # cmap = mp.cm.get_cmap(name='Paired')
+    cmap = mp.cm.get_cmap('Dark2')
 
     gini_coeffs = []
     mean_fitness = []
@@ -143,48 +145,54 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
 
         gini_coeffs.append(g_coeff)
         mean_fitness.append(np.nanmean(means_array))
+
         if log:
             means_array = np.log2(means_array)
             errs_array = np.log2(1+errs_array)
 
-        if i == idx:
-            plt.errorbar(ramp,
-                         means_array,
-                         yerr=errs_array,
-                         label='%s - %.2f - %s' % (cell_line, g_coeff, support_size),
-                         color='k')
-
+        if i == ref_idx:
+            plt.plot(ramp, means_array, 'k')
+            plt.plot(ramp, means_array, 'ko', label=cell_line)
+            # plt.errorbar(ramp,
+            #              means_array,
+            #              yerr=errs_array,
+            #              label='%s - %.2f - %s' % (cell_line, g_coeff, support_size),
+            #              color='k')
         else:
-            plt.errorbar(ramp,
-                         means_array,
-                         yerr=errs_array,
-                         fmt='.', label='%s - %.2f - %s' % (cell_line, g_coeff, support_size),
-                         color=cmap(i/float(ln)))
+            plt.plot(ramp, means_array, 'o', label=cell_line, color=cmap(i/float(ln)))
+            # plt.errorbar(ramp,
+            #              means_array,
+            #              yerr=errs_array,
+            #              fmt='.', label='%s - %.2f - %s' % (cell_line, g_coeff, support_size),
+            #              color=cmap(i/float(ln)))
 
-    mean_g_coeff = gini_coeff(np.array(average_stress_intesity))
-
-    if normalize:
-        average_stress_intesity = average_stress_intesity / average_stress_intesity
-        std_stress_intensity = std_stress_intensity / average_stress_intesity
-    if log:
-        average_stress_intesity = np.log(average_stress_intesity)
-        std_stress_intensity = log_std_stress_intensity
-
-    plt.plot(ramp,
-             average_stress_intesity,
-             color='r',
-             label='%s - %.2f - %s' % ('average', mean_g_coeff , argsorter.shape[0]))
-    plt.plot(ramp,
-             average_stress_intesity+std_stress_intensity,
-             color='g')
-    plt.plot(ramp,
-             average_stress_intesity-std_stress_intensity,
-             color='g')
+    # mean_g_coeff = gini_coeff(np.array(average_stress_intesity))
+    #
+    # if normalize:
+    #     average_stress_intesity = average_stress_intesity / average_stress_intesity
+    #     std_stress_intensity = std_stress_intensity / average_stress_intesity
+    #
+    # if log:
+    #     average_stress_intesity = np.log(average_stress_intesity)
+    #     std_stress_intensity = log_std_stress_intensity
+    #
+    # plt.plot(ramp,
+    #          average_stress_intesity,
+    #          color='r',
+    #          label='%s - %.2f - %s' % ('average', mean_g_coeff, argsorter.shape[0]))
+    #
+    # plt.plot(ramp,
+    #          average_stress_intesity+std_stress_intensity,
+    #          color='g')
+    #
+    # plt.plot(ramp,
+    #          average_stress_intesity-std_stress_intensity,
+    #          color='g')
 
     mp.rc('font', size=10)
     plt.xticks(ramp, np.array(names_accumulator)[support][argsorter], rotation='vertical')
     plt.subplots_adjust(bottom=0.25)
-    # plt.legend(ncol=2)
+    plt.legend(ncol=2)
     plt.show()
 
     triple_negative = ['BT20', 'BT549', 'HCC1143', 'HCC1187', 'HCC1395', 'HCC1599', 'HCC1806', 'HCC1937', 'HCC2185',
@@ -222,7 +230,7 @@ def method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accum
     plt.show()
 
     means_accumulator = np.array(means_accumulator)
-    baseline = means_accumulator[idx, :][support][argsorter][np.newaxis, :]
+    baseline = means_accumulator[ref_idx, :][support][argsorter][np.newaxis, :]
     norm_sorted_means = means_accumulator[:, support][:, argsorter]/baseline
     sorted_names = np.array(names_accumulator)[support][argsorter]
 
@@ -281,6 +289,6 @@ if __name__ == '__main__':
     # ref_strain='HCC1569'
     # ref_strain='ZR751'
     # ref_strain='ZR75B'
-    norm_sorted_means, sorted_names = method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='BT483', normalize=False, log=True)
+    norm_sorted_means, sorted_names = method3(means_accumulator, errs_accumulator, all_cell_lines_arr, names_accumulator, ref_strain='BT483', normalize=False, log=False)
     method4(norm_sorted_means, sorted_names, all_cell_lines,)
     # TODO: re-introduce normalization step
